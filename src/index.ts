@@ -54,3 +54,10 @@ export {
 export { handleSiteRequest, startSite, createVercelHandler, ROLE_CAPABILITIES } from "./web/index.js";
 export { IDENTITY_CAPABILITIES, createIdentityStore } from "./identity/index.js";
 export { GEMINI_CAPABILITIES, createGeminiReviewer, maybeCreateReview } from "./gemini/index.js";
+export {
+  buildEvidenceManifest,
+  verifyEvidence,
+  writeEvidenceManifest,
+  readEvidenceManifest,
+  EVIDENCE_MANIFEST_SCHEMA,
+} from "./evidence/index.js";

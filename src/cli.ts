@@ -9,7 +9,8 @@ import {
   loadContract,
 } from "./core/contract-engine.js";
 import { verify } from "./core/verification-engine.js";
-import { defaultLedgerDir, defaultLedgerPath } from "./ledger/decision-ledger.js";
+import { evidenceHash } from "./core/evidence-engine.js";
+import { defaultLedgerDir, defaultLedgerPath, readLedger } from "./ledger/decision-ledger.js";
 import { renderReport } from "./report/reporter.js";
 import { applyGithubProvenance, emitGithub } from "./integrations/github.js";
 import { readGithubContext } from "./integrations/github-context.js";
@@ -25,6 +26,12 @@ import { createControlPlaneReader } from "./control-plane/reader.js";
 import { createIdentityStore } from "./identity/store.js";
 import { startSite } from "./web/server.js";
 import { createGeminiReviewer, createReviewStore, isReviewSkip, reviewPath } from "./gemini/index.js";
+import {
+  buildEvidenceManifest,
+  readEvidenceManifest,
+  verifyEvidence,
+  writeEvidenceManifest,
+} from "./evidence/index.js";
 
 function help(): string {
   return `
@@ -33,6 +40,7 @@ AI Architecture & Engineering Guardian
 Usage:
   ai-guardian check [path]     Verify a repository against architecture.yaml
   ai-guardian findings [path]  Print the latest machine-readable findings pack
+  ai-guardian evidence [path]  Re-verify the latest evidence proof bundle
   ai-guardian plane [path]     Serve the product UI and admin Control Plane
   ai-guardian init [path]      Write a starter architecture.yaml contract
   ai-guardian version          Print engine version
@@ -98,6 +106,10 @@ export async function main(argv: string[]): Promise<number> {
     return runFindings(target, Boolean(values.json));
   }
 
+  if (command === "evidence") {
+    return runEvidence(target, Boolean(values.json));
+  }
+
   if (command === "plane") {
     return runPlane(target, values.host, values.port);
   }
@@ -112,6 +124,7 @@ export async function main(argv: string[]): Promise<number> {
     const contract = loadContract(contractPath);
     const report = verify({ root: target, contract });
     report.decision.contract_path = contractPath;
+    report.decision.evidence_hash = evidenceHash(report.decision);
 
     const prNumber = parsePr(values.pr);
     const context = readGithubContext(process.env, {
@@ -143,6 +156,9 @@ export async function main(argv: string[]): Promise<number> {
     report.decision = saved.record;
     const findingsPath = writeFindingsPack(target, buildFindingsPack(report.decision));
     const cycle = persistRepairCycle(target, previous, report.decision);
+    const manifest = buildEvidenceManifest(report, cycle);
+    const evidencePath = writeEvidenceManifest(target, manifest);
+    const proof = verifyEvidence(manifest, report.decision);
     const review = await maybeAdvisoryReview(target, report.decision, Boolean(values["no-gemini"]));
     const repairPlan = review && !isReviewSkip(review) ? review.repair_plan : [];
     const dispatched = await dispatchRepairTask({
@@ -156,6 +172,7 @@ export async function main(argv: string[]): Promise<number> {
       process.stdout.write(`Ledger: ${defaultLedgerPath(target, report.decision)}\n`);
       process.stdout.write(`Ledger index: ${indexPath}\n`);
       process.stdout.write(`Findings: ${findingsPath}\n`);
+      process.stdout.write(`Evidence: ${proof.verdict} (${evidencePath})\n`);
       if (cycle) {
         process.stdout.write(
           `Repair cycle: ${cycle.cycle_id} ${cycle.status} (class=${cycle.failure_class ?? "none"})\n`,
@@ -295,6 +312,26 @@ function runFindings(target: string, json: boolean): number {
   }
   process.stdout.write(raw.endsWith("\n") ? raw : `${raw}\n`);
   return 0;
+}
+
+function runEvidence(target: string, json: boolean): number {
+  const manifest = readEvidenceManifest(target);
+  if (!manifest) {
+    process.stderr.write("No evidence manifest found. Run `ai-guardian check` first.\n");
+    return 2;
+  }
+  const latestDecision = resolve(target, ".guardian", "decisions", "latest.json");
+  const decision = existsSync(latestDecision) ? readLedger(latestDecision) : null;
+  const proof = verifyEvidence(manifest, decision);
+  if (json) {
+    process.stdout.write(`${JSON.stringify(proof, null, 2)}\n`);
+  } else {
+    process.stdout.write(`${proof.verdict}\n`);
+    if (proof.verdict === "INVALID") {
+      process.stdout.write(`${proof.reason ?? "Evidence hash mismatch"}\n`);
+    }
+  }
+  return proof.verdict === "VALID" ? 0 : 1;
 }
 
 const isDirect =

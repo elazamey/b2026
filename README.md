@@ -176,7 +176,7 @@ The Guardian does not record `PR #182 = PASS`. It records why.
     "head_sha": "a81f3c2..."
   },
   "contract_hash": "sha256:...",
-  "engine_version": "0.9.1",
+  "engine_version": "0.9.2",
   "timestamp": "2026-09-02T12:00:00.000Z",
   "result": "SAFE_TO_MERGE",
   "checks": {
@@ -302,6 +302,20 @@ npx tsx src/cli.ts findings --json
 
 A repair that changes `architecture.yaml` is rejected with `CTR-001` even if every other check would pass. Each attempt writes a new Decision and an independent cycle under `.guardian/repairs/`. Details: [`docs/repair.md`](docs/repair.md).
 
+## Evidence proof bundle (v0.9.2)
+
+```text
+Code → Scan → Evidence → Hashes → Manifest → Decision
+```
+
+```bash
+npx tsx src/cli.ts check
+npx tsx src/cli.ts evidence
+# VALID
+```
+
+Tampering any check evidence, result, or the repair cycle yields `INVALID` / `Evidence hash mismatch`. The bundle cannot grant merge. Details: [`docs/evidence.md`](docs/evidence.md).
+
 ## Required GitHub gate (v0.5)
 
 `SAFE_TO_MERGE` is the conclusion of the required check named `ai-guardian`.
@@ -372,14 +386,14 @@ Those come later, in this order:
 | **v0.7.3** | Session/CSRF/resource authz/bootstrap-once/login rate limit |
 | **v0.8.0** | Gemini optional reviewer (advisory only, never the gate) |
 | **v0.9.0** | Controlled Repair Orchestration (max 3, verifiable task) |
-| **v0.9.1** | Repair budget / timeout / abuse controls ← current |
-| **v0.9.2** | Repair evidence |
+| **v0.9.1** | Repair budget / timeout / abuse controls |
+| **v0.9.2** | Evidence hardening (proof bundle + tamper detection) ← current |
 | **v1.0** | Open Core + free hosted MVP |
 
 ## Layout
 
 ```text
-src/           core, scanners, gate, agents, control-plane, identity, gemini, web
+src/           core, scanners, gate, agents, evidence, control-plane, identity, gemini, web
 api/plane.ts   Vercel adapter (read-only, not Guardian)
 vercel.json    Hobby hosting for the Control Plane
 ```

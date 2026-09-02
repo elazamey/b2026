@@ -37,7 +37,7 @@ describe("ai-guardian CLI", () => {
   it("prints the engine version", () => {
     const result = run(["version"]);
     assert.equal(result.status, 0);
-    assert.match(result.stdout, /0\.9\.1/);
+    assert.match(result.stdout, /0\.9\.2/);
   });
 
   it("emits a decision ledger JSON for the passing fixture", () => {
@@ -55,6 +55,16 @@ describe("ai-guardian CLI", () => {
     assert.match(result.stdout, /REJECTED/);
     assert.match(result.stdout, /\[BND-001\]/);
     assert.match(result.stdout, /Repair suggestion/);
+  });
+
+  it("re-verifies the proof bundle after check", () => {
+    const target = resolve(repo, "tests/fixtures/pass-project");
+    const checked = run(["check", target, "--no-color", "--no-gemini"]);
+    assert.equal(checked.status, 0, checked.stderr);
+    assert.match(checked.stdout, /Evidence: VALID/);
+    const evidence = run(["evidence", target, "--no-color"]);
+    assert.equal(evidence.status, 0, evidence.stderr);
+    assert.match(evidence.stdout, /VALID/);
   });
 
   it("continues locally when Turso is unavailable", () => {

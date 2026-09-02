@@ -121,4 +121,4 @@ Timeout, oversized diffs, and provider errors stop further dispatch. They do not
 - Not a Core rewrite
 - Not Gemini deciding `SAFE_TO_MERGE`
 
-Next: v0.9.2 evidence, then v1.0 free MVP.
+Next: Final Free Production Readiness Gate, then v1.0 free MVP.
