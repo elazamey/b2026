@@ -41,4 +41,5 @@ export {
   createControlPlaneReader,
   handleControlPlaneRequest,
   startControlPlane,
+  createVercelHandler,
 } from "./control-plane/index.js";

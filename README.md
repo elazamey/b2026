@@ -11,7 +11,7 @@ Arena Agent     → executes
 GitHub          → source of truth (code + architecture.yaml)
 Guardian Core   → verifies (deterministic)
 Decision Engine → SAFE TO MERGE / REJECTED
-Vercel          → deploys only after merge
+Vercel          → hosts Control Plane (read-only, never decides)
 Turso           → records decisions (v0.3+)
 Google APIs     → isolated external integrations
 ```
@@ -176,7 +176,7 @@ The Guardian does not record `PR #182 = PASS`. It records why.
     "head_sha": "a81f3c2..."
   },
   "contract_hash": "sha256:...",
-  "engine_version": "0.6.0",
+  "engine_version": "0.7.0",
   "timestamp": "2026-09-02T12:00:00.000Z",
   "result": "SAFE_TO_MERGE",
   "checks": {
@@ -328,13 +328,30 @@ Routes: `/repositories`, `/repository/:id`, `/decisions`, `/decision/:id`, `/fin
 
 The site shows `commit_sha`, `contract_hash`, `evidence_hash`, and `result`. It cannot change them. POST returns 405. Setup: [`docs/control-plane.md`](docs/control-plane.md). Enable the merge lock: [`docs/github-gate.md`](docs/github-gate.md).
 
+## Vercel hosting (v0.7)
+
+Vercel publishes the Control Plane. It does **not** run Guardian.
+
+```text
+Browser → Vercel → Control Plane → Turso
+GitHub Actions → Guardian → required check ai-guardian
+```
+
+```bash
+npm run build
+node dist/cli.js check          # works with Vercel/Turso/Arena/Gemini off
+node dist/cli.js plane --host 0.0.0.0 --port 4173
+```
+
+Set `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` in the Vercel dashboard only. Never in Git. Deploy notes: [`docs/vercel.md`](docs/vercel.md).
+
 ## What this release does not do
 
-- No Vercel deploy (v0.7)
 - No Gemini merge decision (v0.8, optional explanation only)
 - No Turso as source of truth for the contract
 - No always-on VPS
 - No chat / agent console in the dashboard
+- Vercel is not required for `ai-guardian check`
 
 Those come later, in this order:
 
@@ -345,8 +362,8 @@ Those come later, in this order:
 | **v0.3** | Turso state ledger (optional, recorded state only) |
 | **v0.4** | Agent Adapter + repair loop + audit trail |
 | **v0.5** | Required GitHub gate (`ai-guardian`) |
-| **v0.6** | Web Control Plane (reads Turso, does not decide) ← current |
-| **v0.7** | Free Vercel hosting for the Control Plane |
+| **v0.6** | Web Control Plane (reads Turso, does not decide) |
+| **v0.7** | Free Vercel hosting for the Control Plane ← current |
 | **v0.8** | Gemini optional reviewer (never the gate) |
 | **v0.9** | Multi-agent / provider abstraction |
 | **v1.0** | Open Core + free hosted MVP |
@@ -354,29 +371,9 @@ Those come later, in this order:
 ## Layout
 
 ```text
-src/
-├── cli.ts
-├── core/
-│   ├── contract-engine.ts
-│   ├── verification-engine.ts
-│   ├── decision-engine.ts
-│   └── evidence-engine.ts
-├── scanners/
-│   ├── architecture.ts
-│   ├── dependencies.ts
-│   ├── security.ts
-│   ├── boundaries.ts
-│   └── quality.ts
-├── integrations/
-│   └── github.ts
-├── store/
-│   ├── file-store.ts
-│   ├── turso-store.ts
-│   └── composite-store.ts
-├── ledger/
-│   └── decision-ledger.ts
-└── report/
-    └── reporter.ts
+src/           core, scanners, gate, agents, control-plane
+api/plane.ts   Vercel adapter (read-only, not Guardian)
+vercel.json    Hobby hosting for the Control Plane
 ```
 
 ## Development

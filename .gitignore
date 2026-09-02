@@ -12,3 +12,4 @@ tmp/
 .turbo
 .next
 .cache
+.vercel

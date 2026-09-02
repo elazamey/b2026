@@ -4,3 +4,4 @@ export { createControlPlaneReader, MemoryControlPlaneReader, FileControlPlaneRea
 export { handleControlPlaneRequest } from "./http.js";
 export { startControlPlane } from "./server.js";
 export { assertReadOnlySql, ReadOnlySql } from "./readonly.js";
+export { createVercelHandler, vercelRequestUrl } from "./vercel.js";

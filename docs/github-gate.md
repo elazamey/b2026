@@ -66,7 +66,7 @@ The composite action fails the job on `REJECTED`. Add `--gate` / `GITHUB_TOKEN` 
 
 ## What this is not
 
-- Not a Vercel deploy gate (v0.7)
+- Not a Vercel deploy gate (Vercel only hosts the read-only Control Plane)
 - Not a dashboard that can merge (v0.6 is read-only)
 - Not an LLM vote
 - Not an Arena-controlled check

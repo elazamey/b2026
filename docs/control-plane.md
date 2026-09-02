@@ -39,15 +39,16 @@ The dashboard cannot:
 
 Turso queries from this layer are wrapped so that only `SELECT` runs.
 
-## Run locally (free, no Vercel yet)
+## Run locally
 
 ```bash
 npx tsx src/cli.ts plane --host 0.0.0.0 --port 4173
+node dist/cli.js plane --host 0.0.0.0 --port 4173
 ```
 
 If `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN` are set, the plane reads Turso. Otherwise it reads the local `.guardian/decisions` ledger so you can develop without a remote database.
 
-v0.7 hosts this same plane on free Vercel. v0.6 does not deploy.
+v0.7 hosts this same plane on free Vercel. See [`docs/vercel.md`](vercel.md). Vercel is optional. Guardian does not run there.
 
 ## Authority reminder
 
