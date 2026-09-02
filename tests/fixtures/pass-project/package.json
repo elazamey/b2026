@@ -1,0 +1,9 @@
+{
+  "name": "pass-project",
+  "private": true,
+  "dependencies": {
+    "next": "15.0.0",
+    "react": "19.0.0",
+    "zod": "3.24.0"
+  }
+}

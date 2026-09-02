@@ -1,0 +1,75 @@
+# Git is the source of truth for this contract.
+# Turso/control-plane, if added later, may only record the hash — never replace this file.
+version: "1"
+
+project:
+  name: "ai-guardian"
+  type: "node"
+
+architecture:
+  required_paths:
+    - src
+    - src/core
+    - src/scanners
+    - src/cli.ts
+    - contracts/architecture.schema.yaml
+  forbidden_paths:
+    - src/legacy
+    - tmp
+    - generated/unapproved
+
+dependencies:
+  allowed:
+    - yaml
+  forbidden:
+    - eval
+    - vm2
+
+security:
+  secrets:
+    forbid_in_source: true
+  dangerous_patterns:
+    - hardcoded_credentials
+    - dynamic_code_execution
+    - unsafe_child_process
+  ignore_paths:
+    - tests/fixtures
+
+boundaries:
+  core:
+    paths:
+      - src/core
+    forbidden_imports:
+      - src/cli.ts
+      - src/integrations
+  scanners:
+    paths:
+      - src/scanners
+    forbidden_imports:
+      - src/cli.ts
+      - src/integrations
+      - src/ledger
+
+quality:
+  tests_required: true
+  typecheck_required: true
+  build_required: false
+  commands:
+    typecheck: "npx tsc --noEmit"
+
+scan:
+  ignore:
+    - node_modules
+    - dist
+    - .git
+    - coverage
+    - tests/fixtures
+    - .guardian
+
+merge:
+  require:
+    - architecture
+    - dependencies
+    - security
+    - boundaries
+    - tests

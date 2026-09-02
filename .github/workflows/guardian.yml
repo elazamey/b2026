@@ -1,0 +1,30 @@
+name: Guardian
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+jobs:
+  verify:
+    name: Deterministic verification
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm test
+      - run: npm run typecheck
+      - run: npm run build
+      - name: ai-guardian check
+        run: node dist/cli.js check --no-color
+      - name: Upload decision ledger
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: decision-ledger
+          path: .guardian/decisions/
+          if-no-files-found: ignore

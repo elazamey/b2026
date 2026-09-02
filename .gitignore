@@ -1,0 +1,14 @@
+node_modules/
+dist/
+coverage/
+.guardian/
+.tmp/
+tmp/
+*.log
+.DS_Store
+.env
+.env.*
+!.env.example
+.turbo
+.next
+.cache

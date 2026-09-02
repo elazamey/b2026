@@ -1,0 +1,60 @@
+version: "1"
+
+project:
+  name: "pass-project"
+  type: "nextjs"
+
+architecture:
+  required_paths:
+    - src/app
+    - src/components
+    - src/lib
+    - src/server
+  forbidden_paths:
+    - src/legacy
+    - tmp
+    - generated/unapproved
+
+dependencies:
+  allowed:
+    - next
+    - react
+    - zod
+    - drizzle-orm
+  forbidden:
+    - eval
+    - vm2
+
+security:
+  secrets:
+    forbid_in_source: true
+  dangerous_patterns:
+    - hardcoded_credentials
+    - dynamic_code_execution
+    - unsafe_child_process
+
+boundaries:
+  client:
+    paths:
+      - src/components
+      - src/app
+    forbidden_imports:
+      - src/server
+  server:
+    paths:
+      - src/server
+    forbidden_imports:
+      - src/app/client-only
+
+quality:
+  tests_required: true
+  typecheck_required: false
+  build_required: false
+
+merge:
+  require:
+    - architecture
+    - dependencies
+    - security
+    - boundaries
+    - tests
