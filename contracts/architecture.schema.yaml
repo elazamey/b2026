@@ -1,0 +1,131 @@
+$schema: "https://json-schema.org/draft/2020-12/schema"
+title: AI Guardian Architecture Contract
+description: >
+  Deterministic architecture contract. Git is the source of truth.
+  The Guardian hashes this document and records the hash in the decision ledger.
+type: object
+required:
+  - version
+additionalProperties: false
+properties:
+  version:
+    type: string
+    const: "1"
+  project:
+    type: object
+    properties:
+      name:
+        type: string
+      type:
+        type: string
+        enum: [nextjs, node, generic]
+    additionalProperties: false
+  architecture:
+    type: object
+    properties:
+      required_paths:
+        type: array
+        items:
+          type: string
+      forbidden_paths:
+        type: array
+        items:
+          type: string
+    additionalProperties: false
+  dependencies:
+    type: object
+    properties:
+      allowed:
+        oneOf:
+          - type: array
+            items:
+              type: string
+          - type: "null"
+      forbidden:
+        type: array
+        items:
+          type: string
+    additionalProperties: false
+  security:
+    type: object
+    properties:
+      secrets:
+        type: object
+        properties:
+          forbid_in_source:
+            type: boolean
+        additionalProperties: false
+      dangerous_patterns:
+        type: array
+        items:
+          type: string
+          enum:
+            - hardcoded_credentials
+            - dynamic_code_execution
+            - unsafe_child_process
+      ignore_paths:
+        type: array
+        items:
+          type: string
+    additionalProperties: false
+  boundaries:
+    type: object
+    additionalProperties:
+      type: object
+      properties:
+        paths:
+          type: array
+          items:
+            type: string
+        forbidden_imports:
+          type: array
+          items:
+            type: string
+      additionalProperties: false
+  quality:
+    type: object
+    properties:
+      tests_required:
+        type: boolean
+      typecheck_required:
+        type: boolean
+      build_required:
+        type: boolean
+      commands:
+        type: object
+        properties:
+          test:
+            type: string
+          typecheck:
+            type: string
+          build:
+            type: string
+        additionalProperties: false
+    additionalProperties: false
+  scan:
+    type: object
+    properties:
+      ignore:
+        type: array
+        items:
+          type: string
+      include_globs:
+        type: array
+        items:
+          type: string
+    additionalProperties: false
+  merge:
+    type: object
+    properties:
+      require:
+        type: array
+        items:
+          type: string
+          enum:
+            - architecture
+            - dependencies
+            - security
+            - boundaries
+            - tests
+            - build
+    additionalProperties: false

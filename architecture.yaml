@@ -1,0 +1,174 @@
+# Git is the source of truth for this contract.
+# Turso/control-plane, if added later, may only record the hash — never replace this file.
+version: "1"
+
+project:
+  name: "ai-guardian"
+  type: "node"
+
+architecture:
+  required_paths:
+    - src
+    - src/core
+    - src/scanners
+    - src/cli.ts
+    - src/ledger
+    - src/integrations
+    - src/store
+    - src/loop
+    - src/agents
+    - src/gate
+    - src/control-plane
+    - src/web
+    - src/identity
+    - src/gemini
+    - src/evidence
+    - api/plane.ts
+    - vercel.json
+    - docs/github-gate.md
+    - docs/control-plane.md
+    - docs/vercel.md
+    - docs/public-ui.md
+    - docs/identity.md
+    - docs/gemini.md
+    - docs/repair.md
+    - docs/evidence.md
+    - contracts/architecture.schema.yaml
+    - contracts/decision-ledger.schema.yaml
+    - contracts/turso.schema.sql
+  forbidden_paths:
+    - src/legacy
+    - tmp
+    - generated/unapproved
+
+dependencies:
+  allowed:
+    - yaml
+  forbidden:
+    - eval
+    - vm2
+
+security:
+  secrets:
+    forbid_in_source: true
+  dangerous_patterns:
+    - hardcoded_credentials
+    - dynamic_code_execution
+    - unsafe_child_process
+  ignore_paths:
+    - tests/fixtures
+
+boundaries:
+  core:
+    paths:
+      - src/core
+    forbidden_imports:
+      - src/cli.ts
+      - src/integrations
+      - src/control-plane
+      - src/web
+      - src/identity
+      - src/gemini
+      - src/evidence
+  scanners:
+    paths:
+      - src/scanners
+    forbidden_imports:
+      - src/cli.ts
+      - src/integrations
+      - src/ledger
+      - src/control-plane
+      - src/web
+      - src/identity
+      - src/gemini
+      - src/evidence
+  control_plane:
+    paths:
+      - src/control-plane
+    forbidden_imports:
+      - src/core
+      - src/web
+      - src/identity
+      - src/gemini
+  identity:
+    paths:
+      - src/identity
+    forbidden_imports:
+      - src/core
+      - src/scanners
+      - src/control-plane
+      - src/web
+      - src/cli.ts
+      - src/gemini
+  loop:
+    paths:
+      - src/loop
+    forbidden_imports:
+      - src/gemini
+      - src/web
+      - src/control-plane
+      - src/identity
+      - src/cli.ts
+  agents:
+    paths:
+      - src/agents
+    forbidden_imports:
+      - src/gemini
+      - src/core
+      - src/web
+      - src/control-plane
+      - src/identity
+      - src/cli.ts
+  gemini:
+    paths:
+      - src/gemini
+    forbidden_imports:
+      - src/core
+      - src/web
+      - src/control-plane
+      - src/cli.ts
+      - src/identity
+  evidence:
+    paths:
+      - src/evidence
+    forbidden_imports:
+      - src/cli.ts
+      - src/web
+      - src/control-plane
+      - src/identity
+      - src/gemini
+      - src/agents
+  web:
+    paths:
+      - src/web
+    forbidden_imports:
+      - src/core
+  vercel_adapter:
+    paths:
+      - api
+    forbidden_imports:
+      - src/core
+
+quality:
+  tests_required: true
+  typecheck_required: true
+  build_required: false
+  commands:
+    typecheck: "npx tsc --noEmit"
+
+scan:
+  ignore:
+    - node_modules
+    - dist
+    - .git
+    - coverage
+    - tests/fixtures
+    - .guardian
+
+merge:
+  require:
+    - architecture
+    - dependencies
+    - security
+    - boundaries
+    - tests

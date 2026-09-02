@@ -1,0 +1,10 @@
+{
+  "name": "fail-project",
+  "private": true,
+  "dependencies": {
+    "next": "15.0.0",
+    "react": "19.0.0",
+    "vm2": "3.9.19",
+    "leftpad": "0.0.1"
+  }
+}
