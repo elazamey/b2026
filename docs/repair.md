@@ -121,4 +121,4 @@ Timeout, oversized diffs, and provider errors stop further dispatch. They do not
 - Not a Core rewrite
 - Not Gemini deciding `SAFE_TO_MERGE`
 
-Next: Final Free Production Readiness Gate, then v1.0 free MVP.
+Next: Owner requires `ai-guardian` on `main`, then v1.0.0 Free Production MVP. See [`production.md`](production.md).

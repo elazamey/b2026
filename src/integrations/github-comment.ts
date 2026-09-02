@@ -126,11 +126,11 @@ function renderViolationTable(violations: Finding[]): string {
         ? `${finding.file}:${finding.line}`
         : finding.file
       : "—";
-    return `| \`${cell(finding.id)}\` | ${cell(finding.message)} | \`${cell(loc)}\` | ${cell(finding.repair ?? "")} |`;
+    return `| \`${cell(finding.id)}\` | ${cell(finding.message)} | \`${cell(loc)}\` | ${cell(finding.expected ?? "—")} | ${cell(finding.actual ?? "—")} | ${cell(finding.repair ?? "")} |`;
   });
   const table = [
-    `| ID | Message | File | Repair |`,
-    `| --- | --- | --- | --- |`,
+    `| ID | Message | File | Expected | Forbidden | Repair |`,
+    `| --- | --- | --- | --- | --- | --- |`,
     ...rows,
   ];
   if (violations.length > shown.length) {

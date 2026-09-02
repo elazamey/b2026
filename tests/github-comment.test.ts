@@ -30,6 +30,8 @@ function check(
               message: `${name} failed`,
               file: "src/components/User.ts",
               line: 14,
+              expected: "No hardcoded credentials",
+              actual: "sk-live",
               repair: "Move data access behind an API boundary.",
             },
           ]
@@ -103,6 +105,9 @@ describe("PR comment", () => {
     assert.match(markdown, /SEC-001/);
     assert.match(markdown, /#7/);
     assert.match(markdown, /sha256:contract/);
+    assert.match(markdown, /Expected/);
+    assert.match(markdown, /Forbidden/);
+    assert.match(markdown, /No hardcoded credentials/);
     assert.match(markdown, /src\/components\/User.ts:14/);
     assert.doesNotMatch(markdown, /State ledger/);
   });

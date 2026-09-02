@@ -32,6 +32,8 @@ Optionally also require `ci`. The architectural barrier is still `ai-guardian`.
 
 Until that ruleset exists, a user with bypass permission can still merge a red PR. After it exists, GitHub enforces Guardian.
 
+Consumer onboarding (contract → workflow → this lock): [`onboarding.md`](onboarding.md). Production surface: [`production.md`](production.md).
+
 ## What the check reports
 
 | Guardian decision | Check `ai-guardian` |

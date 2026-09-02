@@ -4,6 +4,22 @@ Deterministic verification for AI-generated changes.
 
 The coding agent may propose and implement. It does not get to decide whether a change is safe to merge.
 
+Guardian decides. GitHub enforces. Proof is verifiable. AI is not the authority.
+
+It does **not** prove that the program is safe. It enforces a verifiable engineering contract and deterministic quality/security gates.
+
+## Free onboarding (3 steps)
+
+1. Add `architecture.yaml` — `npx tsx src/cli.ts init` (or copy a starter contract).
+2. Copy [`examples/github-workflow.yml`](examples/github-workflow.yml) to `.github/workflows/guardian.yml`. Keep the job name **`ai-guardian`**.
+3. **Owner:** require status check `ai-guardian` on `main` — [`docs/github-gate.md`](docs/github-gate.md).
+
+Until step 3, Guardian is a correct signal, not a merge barrier.
+
+Developer result on each PR: `SAFE TO MERGE` or `REJECTED` with rule id, file/line, expected, forbidden, evidence hash.
+
+Full surface: [`docs/onboarding.md`](docs/onboarding.md) · [`docs/production.md`](docs/production.md)
+
 ```text
 Execution  ≠  Verification  ≠  Decision  ≠  Deployment  ≠  Data
 
@@ -387,8 +403,8 @@ Those come later, in this order:
 | **v0.8.0** | Gemini optional reviewer (advisory only, never the gate) |
 | **v0.9.0** | Controlled Repair Orchestration (max 3, verifiable task) |
 | **v0.9.1** | Repair budget / timeout / abuse controls |
-| **v0.9.2** | Evidence hardening (proof bundle + tamper detection) ← current |
-| **v1.0** | Open Core + free hosted MVP |
+| **v0.9.2** | Evidence hardening (proof bundle + tamper detection) ← current engine |
+| **v1.0.0** | Free Production MVP — not started until Owner requires `ai-guardian` on `main` |
 
 ## Layout
 
@@ -396,6 +412,8 @@ Those come later, in this order:
 src/           core, scanners, gate, agents, evidence, control-plane, identity, gemini, web
 api/plane.ts   Vercel adapter (read-only, not Guardian)
 vercel.json    Hobby hosting for the Control Plane
+examples/      consumer GitHub workflow (copy-paste)
+docs/          gate, evidence, onboarding, production contract
 ```
 
 ## Development
