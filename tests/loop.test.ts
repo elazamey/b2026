@@ -151,6 +151,8 @@ describe("v0.4 Arena repair loop", () => {
     assert.match(markdown, /Repair instructions for coding agents/);
     assert.match(markdown, /architecture.yaml/);
     assert.match(markdown, /guardian.findings\/v1/);
+    assert.match(markdown, /guardian.repair-task\/v2/);
+    assert.match(markdown, /may_merge/);
     assert.match(markdown, /<!-- ai-guardian-decision -->/);
   });
 

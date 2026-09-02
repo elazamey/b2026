@@ -12,7 +12,10 @@ PASS / REJECTED
      └── REJECTED → Gemini (optional) → explanation + repair plan
                           │
                           ▼
-                    Agent Adapter → new commit → Guardian again
+                    Verifiable RepairTask → Agent Adapter
+                          │
+                          ▼
+                    new commit → Guardian again
 ```
 
 ## Authority

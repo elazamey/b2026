@@ -17,6 +17,12 @@ import { defaultContractYaml } from "./core/init-template.js";
 import { createDecisionStore } from "./store/create.js";
 import { applyRepairLoop } from "./loop/apply.js";
 import { buildFindingsPack, writeFindingsPack } from "./loop/findings-pack.js";
+import {
+  buildRepairCycle,
+  readLastRepairProvider,
+  writeRepairCycle,
+} from "./loop/cycles.js";
+import { MAX_REPAIR_ATTEMPTS } from "./loop/orchestrate.js";
 import { dispatchRepairTask } from "./agents/dispatch.js";
 import { detectParentCommitSha } from "./util/git.js";
 import { createControlPlaneReader } from "./control-plane/reader.js";
@@ -140,17 +146,28 @@ export async function main(argv: string[]): Promise<number> {
     const saved = await store.saveDecision(report.decision);
     report.decision = saved.record;
     const findingsPath = writeFindingsPack(target, buildFindingsPack(report.decision));
+    const cyclePath = persistRepairCycle(target, previous, report.decision);
+    const review = await maybeAdvisoryReview(target, report.decision, Boolean(values["no-gemini"]));
+    const repairPlan = review && !isReviewSkip(review) ? review.repair_plan : [];
     const dispatched = await dispatchRepairTask({
       root: target,
       decision: report.decision,
+      repairPlan,
     });
-    const review = await maybeAdvisoryReview(target, report.decision, Boolean(values["no-gemini"]));
 
     if (!values.json) {
       const indexPath = resolve(defaultLedgerDir(target), "index.json");
       process.stdout.write(`Ledger: ${defaultLedgerPath(target, report.decision)}\n`);
       process.stdout.write(`Ledger index: ${indexPath}\n`);
       process.stdout.write(`Findings: ${findingsPath}\n`);
+      if (cyclePath) {
+        process.stdout.write(`Repair cycle: ${cyclePath}\n`);
+      }
+      if (dispatched.stopped === "exhausted") {
+        process.stdout.write(
+          `Repair budget exhausted (${MAX_REPAIR_ATTEMPTS}/${MAX_REPAIR_ATTEMPTS}). Human review. Agent cannot grant passage.\n`,
+        );
+      }
       if (dispatched.task) {
         const written = dispatched.results.find((item) => item.written)?.written;
         process.stdout.write(
@@ -190,6 +207,21 @@ export async function main(argv: string[]): Promise<number> {
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
     return 2;
   }
+}
+
+function persistRepairCycle(
+  root: string,
+  previous: DecisionRecord | null,
+  current: DecisionRecord,
+): string | undefined {
+  if (!previous || !current.lineage) return undefined;
+  const cycle = buildRepairCycle({
+    previous,
+    current,
+    repairProvider: readLastRepairProvider(root, current.lineage.parent_decision_id),
+  });
+  if (!cycle) return undefined;
+  return writeRepairCycle(root, cycle);
 }
 
 async function maybeAdvisoryReview(root: string, decision: DecisionRecord, disabled: boolean) {

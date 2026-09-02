@@ -33,7 +33,13 @@ export { renderReport } from "./report/reporter.js";
 export { renderPrComment } from "./integrations/github-comment.js";
 export { applyGithubProvenance, emitGithub } from "./integrations/github.js";
 export { createGithubClient, upsertDecisionComment } from "./integrations/github-api.js";
-export { applyRepairLoop, buildFindingsPack } from "./loop/index.js";
+export {
+  applyRepairLoop,
+  buildFindingsPack,
+  MAX_REPAIR_ATTEMPTS,
+  shouldDispatchRepair,
+  buildRepairCycle,
+} from "./loop/index.js";
 export { dispatchRepairTask, buildRepairTask, ArenaAdapter, ManualAdapter } from "./agents/index.js";
 export { GATE_CHECK_NAME, gateConclusion } from "./gate/check-run.js";
 export {

@@ -1,6 +1,8 @@
 import type { CheckResult, DecisionRecord, Finding, VerificationReport } from "../types.js";
 import { COMMENT_MARKER } from "./github-api.js";
 import { buildFindingsPack } from "../loop/findings-pack.js";
+import { MAX_REPAIR_ATTEMPTS, orchestrationStatus, repairAttemptNumber } from "../loop/orchestrate.js";
+import { buildRepairTask } from "../agents/task.js";
 
 const CHECK_ORDER = [
   "architecture",
@@ -56,9 +58,30 @@ export function renderPrComment(report: VerificationReport): string {
     lines.push("### Repair instructions for coding agents", "");
     lines.push("GitHub is the event bus. Guardian does not call the agent.");
     lines.push("");
+    const attempt = repairAttemptNumber(decision);
+    const status = orchestrationStatus(decision);
     lines.push("- Do **not** edit `architecture.yaml` to bypass a finding.");
     lines.push("- Do **not** declare `SAFE_TO_MERGE`.");
-    lines.push("- Create a **new commit**, then push. Guardian will re-check.");
+    lines.push("- Do **not** merge. Guardian is the only merge authority.");
+    if (status === "exhausted") {
+      lines.push(
+        `- Repair budget exhausted (${attempt}/${MAX_REPAIR_ATTEMPTS}). Human review. The agent cannot grant passage.`,
+      );
+    } else {
+      lines.push(
+        `- Create a **new commit**, then push. Guardian will re-check (${attempt + 1}/${MAX_REPAIR_ATTEMPTS}).`,
+      );
+    }
+    lines.push("");
+    const task = buildRepairTask(decision, "arena");
+    lines.push("<details>");
+    lines.push("<summary>Verifiable repair task</summary>");
+    lines.push("");
+    lines.push("```json");
+    lines.push(JSON.stringify(task, null, 2));
+    lines.push("```");
+    lines.push("");
+    lines.push("</details>");
     lines.push("");
     lines.push("<details>");
     lines.push("<summary>Machine-readable findings</summary>");

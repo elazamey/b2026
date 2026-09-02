@@ -30,6 +30,7 @@ architecture:
     - docs/public-ui.md
     - docs/identity.md
     - docs/gemini.md
+    - docs/repair.md
     - contracts/architecture.schema.yaml
     - contracts/decision-ledger.schema.yaml
     - contracts/turso.schema.sql
@@ -95,6 +96,25 @@ boundaries:
       - src/web
       - src/cli.ts
       - src/gemini
+  loop:
+    paths:
+      - src/loop
+    forbidden_imports:
+      - src/gemini
+      - src/web
+      - src/control-plane
+      - src/identity
+      - src/cli.ts
+  agents:
+    paths:
+      - src/agents
+    forbidden_imports:
+      - src/gemini
+      - src/core
+      - src/web
+      - src/control-plane
+      - src/identity
+      - src/cli.ts
   gemini:
     paths:
       - src/gemini

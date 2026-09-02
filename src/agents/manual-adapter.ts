@@ -1,6 +1,6 @@
 import { mkdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
-import type { AgentAdapter, DispatchResult, RepairTask } from "./types.js";
+import { assertRepairTaskSafe, type AgentAdapter, type DispatchResult, type RepairTask } from "./types.js";
 
 export class ManualAdapter implements AgentAdapter {
   readonly provider = "manual" as const;
@@ -8,12 +8,10 @@ export class ManualAdapter implements AgentAdapter {
   constructor(private readonly root: string) {}
 
   async dispatch(task: RepairTask): Promise<DispatchResult> {
-    if (task.constraints.merge_authority !== "guardian") {
-      throw new Error("Adapter refused a task that claims merge authority.");
-    }
+    assertRepairTaskSafe(task);
     const dir = resolve(this.root, ".guardian", "repair-tasks");
     mkdirSync(dir, { recursive: true });
-    const named = resolve(dir, `${task.decision_id}.json`);
+    const named = resolve(dir, `${task.task_id}.json`);
     const latest = resolve(this.root, ".guardian", "repair-task.json");
     const body = `${JSON.stringify(task, null, 2)}\n`;
     writeFileSync(named, body, "utf8");

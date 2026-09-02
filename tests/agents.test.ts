@@ -66,8 +66,11 @@ describe("Agent adapters", () => {
     const rejected = decision(true);
     const task = buildRepairTask(rejected, "arena");
     assert.equal(task.constraints.merge_authority, "guardian");
-    assert.equal(task.findings.repair.allowed, true);
+    assert.equal(task.constraints.may_merge, false);
+    assert.equal(task.constraints.max_attempts, 3);
+    assert.equal(task.violations[0]?.rule_id, "SEC-001");
     assert.equal(task.channel, "github-bus");
+    assert.equal("findings" in task, false);
   });
 
   it("does not dispatch a repair when the Guardian already passed", async () => {

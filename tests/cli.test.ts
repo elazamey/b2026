@@ -37,7 +37,7 @@ describe("ai-guardian CLI", () => {
   it("prints the engine version", () => {
     const result = run(["version"]);
     assert.equal(result.status, 0);
-    assert.match(result.stdout, /0\.8\.0/);
+    assert.match(result.stdout, /0\.9\.0/);
   });
 
   it("emits a decision ledger JSON for the passing fixture", () => {

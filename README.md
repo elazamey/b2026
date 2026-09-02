@@ -176,7 +176,7 @@ The Guardian does not record `PR #182 = PASS`. It records why.
     "head_sha": "a81f3c2..."
   },
   "contract_hash": "sha256:...",
-  "engine_version": "0.8.0",
+  "engine_version": "0.9.0",
   "timestamp": "2026-09-02T12:00:00.000Z",
   "result": "SAFE_TO_MERGE",
   "checks": {
@@ -281,23 +281,26 @@ npx tsx src/cli.ts check
 
 Schema: [`contracts/turso.schema.sql`](contracts/turso.schema.sql)
 
-## Repair loop (v0.4)
+## Repair loop (v0.4) and Controlled Repair Orchestration (v0.9)
 
 Guardian does **not** call Arena. Arena is an optional **Agent Provider**. GitHub carries the event:
 
 ```text
-PR → Guardian check → REJECTED → sticky comment + findings pack + repair-task
+PR → Guardian → REJECTED → Gemini advisory (optional)
+  → verifiable RepairTask (not the full report)
   → Adapter (Arena | Manual | Future)
-  → new commit → push
-  → GitHub → Guardian again
+  → new commit → push → Guardian again
+  → PASS: stop  |  REJECTED: next attempt, or human after 3
 ```
+
+Hard barriers: `max_attempts: 3`, `may_modify_contract: false`, `may_declare_safe_to_merge: false`, `may_merge: false`.
 
 ```bash
 npx tsx src/cli.ts check
 npx tsx src/cli.ts findings --json
 ```
 
-A repair that changes `architecture.yaml` is rejected with `CTR-001` even if every other check would pass.
+A repair that changes `architecture.yaml` is rejected with `CTR-001` even if every other check would pass. Each attempt writes a new Decision and an independent cycle under `.guardian/repairs/`. Details: [`docs/repair.md`](docs/repair.md).
 
 ## Required GitHub gate (v0.5)
 
@@ -367,9 +370,10 @@ Those come later, in this order:
 | **v0.7.1** | Public user frontend (`/`, `/app`) + admin `/admin` |
 | **v0.7.2** | Identity & authorization (server session, Role ≠ Ownership) |
 | **v0.7.3** | Session/CSRF/resource authz/bootstrap-once/login rate limit |
-| **v0.8.0** | Gemini optional reviewer (advisory only, never the gate) ← current |
-| **v0.8** | Gemini optional reviewer (never the gate) |
-| **v0.9** | Multi-agent / provider abstraction |
+| **v0.8.0** | Gemini optional reviewer (advisory only, never the gate) |
+| **v0.9.0** | Controlled Repair Orchestration (max 3, verifiable task) ← current |
+| **v0.9.1** | Repair budget / timeout |
+| **v0.9.2** | Repair evidence |
 | **v1.0** | Open Core + free hosted MVP |
 
 ## Layout
