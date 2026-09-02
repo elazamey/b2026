@@ -17,6 +17,9 @@ import { csrfFromCookie, csrfMatches, newCsrfToken, originAllowed } from "../ide
 import { clientIp, LoginLimiter } from "../identity/rate-limit.js";
 import { MemoryIdentityStore } from "../identity/store.js";
 import type { IdentityStore, Principal, Project } from "../identity/types.js";
+import type { GeminiReviewer } from "../gemini/client.js";
+import { isReviewSkip } from "../gemini/types.js";
+import { MemoryReviewStore, type ReviewStore } from "../gemini/store.js";
 import { renderPublicPage, type PublicPage } from "./html.js";
 import { headerValue, parseForm } from "./roles.js";
 
@@ -27,6 +30,8 @@ const defaultLimiter = new LoginLimiter();
 
 export interface SiteContext {
   limiter?: LoginLimiter;
+  reviews?: ReviewStore;
+  gemini?: GeminiReviewer;
 }
 
 export async function handleSiteRequest(
@@ -43,6 +48,7 @@ export async function handleSiteRequest(
   const principal = await identity.getPrincipal(token);
   const secure = requestIsSecure(request.headers);
   const limiter = context.limiter ?? defaultLimiter;
+  const reviews = context.reviews ?? new MemoryReviewStore();
   const csrf = csrfFromCookie(cookieHeader) ?? newCsrfToken();
   const csrfHeader = csrfCookie(csrf, { secure });
 
@@ -85,6 +91,23 @@ export async function handleSiteRequest(
     }
     if (token) await identity.revokeSession(token);
     return redirect("/", [clearSessionCookie({ secure }), csrfHeader]);
+  }
+
+  if (pathname.startsWith("/api/reviews/")) {
+    const decisionId = decodeURIComponent(pathname.slice("/api/reviews/".length));
+    return handleReviewApi({
+      method,
+      decisionId,
+      principal,
+      reader,
+      identity,
+      reviews,
+      gemini: context.gemini,
+      cookieHeader,
+      csrf,
+      csrfHeader,
+      body: request.body ?? "",
+    });
   }
 
   if (pathname === "/admin" || pathname.startsWith("/admin/")) {
@@ -147,6 +170,76 @@ export async function handleSiteRequest(
     return text(405, DECISION_MUTATION_BLOCK, { Allow: "GET, HEAD" });
   }
   return html(404, renderPublicPage({ name: "not-found" }, null, principal, csrf), csrfHeader);
+}
+
+async function handleReviewApi(input: {
+  method: string;
+  decisionId: string;
+  principal: Principal | null;
+  reader: ControlPlaneReader;
+  identity: IdentityStore;
+  reviews: ReviewStore;
+  gemini?: GeminiReviewer;
+  cookieHeader: string | null;
+  csrf: string;
+  csrfHeader: string;
+  body: string;
+}): Promise<PlaneResponse> {
+  if (!input.principal) {
+    return json(401, { error: "unauthorized", writable: false, authority: "advisory" });
+  }
+  if (!input.decisionId) {
+    return json(404, { error: "not_found", writable: false, authority: "advisory" });
+  }
+  const record = await input.reader.getDecision(input.decisionId);
+  if (!record) {
+    return json(404, { error: "not_found", writable: false, authority: "advisory" });
+  }
+  const project = await input.identity.findProjectByRepository(record.repository);
+  if (!project || !canReadProject(input.principal, project)) {
+    return json(404, { error: "not_found", writable: false, authority: "advisory" });
+  }
+
+  if (input.method === "GET" || input.method === "HEAD") {
+    const review = await input.reviews.getByDecision(input.decisionId);
+    if (!review) return json(404, { error: "not_found", writable: false, authority: "advisory" });
+    return json(200, { ...review, writable: false });
+  }
+
+  if (input.method !== "POST") {
+    return text(405, DECISION_MUTATION_BLOCK, { Allow: "GET, HEAD, POST" });
+  }
+
+  const form = parseForm(input.body);
+  if (!csrfMatches(csrfFromCookie(input.cookieHeader), form.csrf)) {
+    return json(403, { error: "csrf", writable: false, authority: "advisory" });
+  }
+  if (!input.gemini) {
+    return json(503, {
+      error: "gemini_off",
+      message: "Gemini off. Guardian decisions are unchanged.",
+      writable: false,
+      authority: "advisory",
+      decision_result: record.result,
+    });
+  }
+  const reviewed = await input.gemini.review(record);
+  if (isReviewSkip(reviewed)) {
+    return json(503, {
+      error: reviewed.reason,
+      message: "Gemini unavailable. Guardian decisions are unchanged.",
+      writable: false,
+      authority: "advisory",
+      decision_result: record.result,
+    });
+  }
+  const saved = await input.reviews.save(reviewed);
+  const sealed = await input.reader.getDecision(record.decision_id);
+  return json(200, {
+    ...saved,
+    writable: false,
+    decision_result: sealed?.result,
+  });
 }
 
 function resolveApp(pathname: string): PublicPage | null {

@@ -27,6 +27,7 @@ Set these in the Vercel project **Environment Variables** UI, never in Git:
 TURSO_DATABASE_URL
 TURSO_AUTH_TOKEN
 GUARDIAN_BOOTSTRAP_ADMIN_EMAIL
+GEMINI_API_KEY
 ```
 
 They must not appear in `architecture.yaml`, the decision ledger, or the PR comment. Local `.env` is gitignored. `.env.example` stays empty.

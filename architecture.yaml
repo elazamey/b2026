@@ -21,6 +21,7 @@ architecture:
     - src/control-plane
     - src/web
     - src/identity
+    - src/gemini
     - api/plane.ts
     - vercel.json
     - docs/github-gate.md
@@ -28,6 +29,7 @@ architecture:
     - docs/vercel.md
     - docs/public-ui.md
     - docs/identity.md
+    - docs/gemini.md
     - contracts/architecture.schema.yaml
     - contracts/decision-ledger.schema.yaml
     - contracts/turso.schema.sql
@@ -63,6 +65,7 @@ boundaries:
       - src/control-plane
       - src/web
       - src/identity
+      - src/gemini
   scanners:
     paths:
       - src/scanners
@@ -73,6 +76,7 @@ boundaries:
       - src/control-plane
       - src/web
       - src/identity
+      - src/gemini
   control_plane:
     paths:
       - src/control-plane
@@ -80,6 +84,7 @@ boundaries:
       - src/core
       - src/web
       - src/identity
+      - src/gemini
   identity:
     paths:
       - src/identity
@@ -89,6 +94,16 @@ boundaries:
       - src/control-plane
       - src/web
       - src/cli.ts
+      - src/gemini
+  gemini:
+    paths:
+      - src/gemini
+    forbidden_imports:
+      - src/core
+      - src/web
+      - src/control-plane
+      - src/cli.ts
+      - src/identity
   web:
     paths:
       - src/web

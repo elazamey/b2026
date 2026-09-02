@@ -2,6 +2,8 @@ import { createServer, type IncomingMessage, type Server, type ServerResponse } 
 import type { ControlPlaneReader } from "../control-plane/types.js";
 import type { IdentityStore } from "../identity/types.js";
 import { MemoryIdentityStore } from "../identity/store.js";
+import type { GeminiReviewer } from "../gemini/client.js";
+import type { ReviewStore } from "../gemini/store.js";
 import { handleSiteRequest } from "./router.js";
 
 export function startSite(options: {
@@ -9,10 +11,15 @@ export function startSite(options: {
   port: number;
   reader: ControlPlaneReader;
   identity?: IdentityStore;
+  reviews?: ReviewStore;
+  gemini?: GeminiReviewer;
 }): Server {
   const identity = options.identity ?? new MemoryIdentityStore();
   const server = createServer((req, res) => {
-    void serve(req, res, options.reader, identity);
+    void serve(req, res, options.reader, identity, {
+      reviews: options.reviews,
+      gemini: options.gemini,
+    });
   });
   server.listen(options.port, options.host);
   return server;
@@ -23,6 +30,7 @@ async function serve(
   res: ServerResponse,
   reader: ControlPlaneReader,
   identity: IdentityStore,
+  context: { reviews?: ReviewStore; gemini?: GeminiReviewer },
 ): Promise<void> {
   try {
     const body = await readBody(req);
@@ -35,6 +43,7 @@ async function serve(
       },
       reader,
       identity,
+      context,
     );
     res.writeHead(response.status, response.headers);
     res.end(response.body);

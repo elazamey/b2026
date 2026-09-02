@@ -22,6 +22,7 @@ function run(
       GH_TOKEN: "",
       TURSO_DATABASE_URL: "",
       TURSO_AUTH_TOKEN: "",
+      GEMINI_API_KEY: "",
       ...extraEnv,
     },
   });
@@ -36,7 +37,7 @@ describe("ai-guardian CLI", () => {
   it("prints the engine version", () => {
     const result = run(["version"]);
     assert.equal(result.status, 0);
-    assert.match(result.stdout, /0\.7\.3/);
+    assert.match(result.stdout, /0\.8\.0/);
   });
 
   it("emits a decision ledger JSON for the passing fixture", () => {

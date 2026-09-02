@@ -2,7 +2,7 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { dirname, resolve } from "node:path";
-import { ENGINE_VERSION } from "./types.js";
+import { ENGINE_VERSION, type DecisionRecord } from "./types.js";
 import {
   ContractError,
   findContractPath,
@@ -22,6 +22,7 @@ import { detectParentCommitSha } from "./util/git.js";
 import { createControlPlaneReader } from "./control-plane/reader.js";
 import { createIdentityStore } from "./identity/store.js";
 import { startSite } from "./web/server.js";
+import { createGeminiReviewer, createReviewStore, isReviewSkip, reviewPath } from "./gemini/index.js";
 
 function help(): string {
   return `
@@ -42,6 +43,7 @@ Options:
   --no-comment                 Do not post a PR comment
   --pr <number>                Pull request number (defaults to GitHub Actions event)
   --no-turso                   Do not persist to Turso even if credentials are set
+  --no-gemini                  Do not request an advisory Gemini review
   --gate                       Publish the required GitHub check named ai-guardian
   --no-gate                    Do not publish a GitHub Check Run
   --host <addr>                Control plane bind address (default: 0.0.0.0)
@@ -65,6 +67,7 @@ export async function main(argv: string[]): Promise<number> {
       "no-comment": { type: "boolean", default: false },
       pr: { type: "string" },
       "no-turso": { type: "boolean", default: false },
+      "no-gemini": { type: "boolean", default: false },
       gate: { type: "boolean", default: false },
       "no-gate": { type: "boolean", default: false },
       host: { type: "string" },
@@ -141,6 +144,7 @@ export async function main(argv: string[]): Promise<number> {
       root: target,
       decision: report.decision,
     });
+    const review = await maybeAdvisoryReview(target, report.decision, Boolean(values["no-gemini"]));
 
     if (!values.json) {
       const indexPath = resolve(defaultLedgerDir(target), "index.json");
@@ -155,6 +159,9 @@ export async function main(argv: string[]): Promise<number> {
       }
       if (saved.storage.turso === "persisted" || saved.storage.turso === "exists") {
         process.stdout.write(`Turso: ${saved.storage.turso} (${report.decision.decision_id})\n`);
+      }
+      if (review && !isReviewSkip(review)) {
+        process.stdout.write(`Review: ${reviewPath(target, review.decision_id)} (advisory)\n`);
       }
       process.stdout.write("\n");
     }
@@ -185,6 +192,18 @@ export async function main(argv: string[]): Promise<number> {
   }
 }
 
+async function maybeAdvisoryReview(root: string, decision: DecisionRecord, disabled: boolean) {
+  const result = await createGeminiReviewer({ env: process.env, disabled }).review(decision);
+  if (isReviewSkip(result)) {
+    if (result.reason === "unavailable") {
+      process.stderr.write("Gemini unavailable. Guardian decisions are unchanged.\n");
+    }
+    return result;
+  }
+  await createReviewStore(root).save(result);
+  return result;
+}
+
 function parsePr(value?: string): number | undefined {
   if (!value) return undefined;
   const parsed = Number.parseInt(value, 10);
@@ -203,7 +222,14 @@ async function runPlane(target: string, hostFlag?: string, portFlag?: string): P
   }
   const reader = createControlPlaneReader({ root: target, env: process.env });
   const identity = createIdentityStore({ root: target, env: process.env });
-  startSite({ host, port, reader, identity });
+  startSite({
+    host,
+    port,
+    reader,
+    identity,
+    reviews: createReviewStore(target),
+    gemini: createGeminiReviewer({ env: process.env }),
+  });
   process.stdout.write(
     `AI Guardian site http://${host}:${port}\nPublic /  App /app  Admin /admin\nSource: ${reader.kind}\nIdentity: server session (cookie is not a role)\nUI cannot decide or merge.\n`,
   );

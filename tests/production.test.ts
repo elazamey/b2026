@@ -94,7 +94,7 @@ describe("v0.7 production readiness", () => {
       encoding: "utf8",
     });
     assert.equal(version.status, 0, version.stderr);
-    assert.match(version.stdout, /0\.7\.3/);
+    assert.match(version.stdout, /0\.8\.0/);
 
     const checkRun = spawnSync(
       process.execPath,
@@ -265,7 +265,7 @@ describe("v0.7 production readiness", () => {
     for (const name of readdirSync(core)) {
       if (!name.endsWith(".ts")) continue;
       const text = readFileSync(join(core, name), "utf8");
-      assert.doesNotMatch(text, /control-plane|vercel|src\/identity/i);
+      assert.doesNotMatch(text, /control-plane|vercel|src\/identity|src\/gemini/i);
     }
   });
 });

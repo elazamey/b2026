@@ -3,6 +3,8 @@ import { createControlPlaneReader } from "../control-plane/reader.js";
 import { vercelRequestUrl, type VercelLikeRequest, type VercelLikeResponse } from "../control-plane/vercel.js";
 import { createIdentityStore } from "../identity/store.js";
 import type { IdentityStore } from "../identity/types.js";
+import { createGeminiReviewer, createReviewStore, type GeminiReviewer } from "../gemini/index.js";
+import type { ReviewStore } from "../gemini/store.js";
 import { handleSiteRequest } from "./router.js";
 
 export { vercelRequestUrl } from "../control-plane/vercel.js";
@@ -12,6 +14,8 @@ export function createVercelHandler(options: {
   env?: NodeJS.ProcessEnv;
   reader?: ControlPlaneReader;
   identity?: IdentityStore;
+  reviews?: ReviewStore;
+  gemini?: GeminiReviewer;
 } = {}) {
   return async function vercelHandler(
     req: VercelLikeRequest & { body?: string },
@@ -27,6 +31,8 @@ export function createVercelHandler(options: {
           env,
         });
       const identity = options.identity ?? createIdentityStore({ root, env });
+      const reviews = options.reviews ?? createReviewStore(root);
+      const gemini = options.gemini ?? createGeminiReviewer({ env });
       const response = await handleSiteRequest(
         {
           method: req.method ?? "GET",
@@ -36,6 +42,7 @@ export function createVercelHandler(options: {
         },
         reader,
         identity,
+        { reviews, gemini },
       );
       res.statusCode = response.status;
       for (const [name, value] of Object.entries(response.headers)) {
