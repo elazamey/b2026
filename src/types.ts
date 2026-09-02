@@ -1,4 +1,4 @@
-export const ENGINE_VERSION = "0.2.0";
+export const ENGINE_VERSION = "0.3.0";
 
 export const LEDGER_SCHEMA_VERSION = "0.2";
 
@@ -112,6 +112,11 @@ export interface GithubProvenance {
   comment_url?: string;
 }
 
+export interface DecisionStorageState {
+  local: true;
+  turso?: "persisted" | "unavailable" | "skipped" | "exists";
+}
+
 export interface DecisionRecord {
   schema_version: typeof LEDGER_SCHEMA_VERSION;
   decision_id: string;
@@ -121,6 +126,7 @@ export interface DecisionRecord {
   branch?: string;
   pull_request: PullRequestRef | null;
   github: GithubProvenance | null;
+  storage?: DecisionStorageState;
   contract_path: string;
   contract_hash: string;
   engine_version: string;

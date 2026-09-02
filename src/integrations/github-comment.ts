@@ -41,6 +41,9 @@ export function renderPrComment(report: VerificationReport): string {
   lines.push(`| Contract hash | \`${decision.contract_hash}\` |`);
   lines.push(`| Evidence hash | \`${decision.evidence_hash}\` |`);
   lines.push(`| Decision ID | \`${decision.decision_id}\` |`);
+  if (decision.storage?.turso === "persisted" || decision.storage?.turso === "exists") {
+    lines.push(`| State ledger | Turso (\`${decision.decision_id}\`) |`);
+  }
   lines.push(`| Engine | \`${decision.engine_version}\` |`);
   lines.push(`| Timestamp | \`${decision.timestamp}\` |`);
   if (decision.github?.run_url) {

@@ -6,7 +6,10 @@ import { resolve } from "node:path";
 const repo = resolve(import.meta.dirname, "..");
 const cli = resolve(repo, "src/cli.ts");
 
-function run(args: string[]): { status: number; stdout: string; stderr: string } {
+function run(
+  args: string[],
+  extraEnv: NodeJS.ProcessEnv = {},
+): { status: number; stdout: string; stderr: string } {
   const tsx = resolve(repo, "node_modules/.bin/tsx");
   const result = spawnSync(tsx, [cli, ...args], {
     cwd: repo,
@@ -17,6 +20,9 @@ function run(args: string[]): { status: number; stdout: string; stderr: string }
       GITHUB_ACTIONS: "",
       GITHUB_TOKEN: "",
       GH_TOKEN: "",
+      TURSO_DATABASE_URL: "",
+      TURSO_AUTH_TOKEN: "",
+      ...extraEnv,
     },
   });
   return {
@@ -30,7 +36,7 @@ describe("ai-guardian CLI", () => {
   it("prints the engine version", () => {
     const result = run(["version"]);
     assert.equal(result.status, 0);
-    assert.match(result.stdout, /0\.2\.0/);
+    assert.match(result.stdout, /0\.3\.0/);
   });
 
   it("emits a decision ledger JSON for the passing fixture", () => {
@@ -48,5 +54,17 @@ describe("ai-guardian CLI", () => {
     assert.match(result.stdout, /REJECTED/);
     assert.match(result.stdout, /\[BND-001\]/);
     assert.match(result.stdout, /Repair suggestion/);
+  });
+
+  it("continues locally when Turso is unavailable", () => {
+    const target = resolve(repo, "tests/fixtures/pass-project");
+    const result = run(["check", target, "--json", "--no-color"], {
+      TURSO_DATABASE_URL: "https://127.0.0.1:1",
+      TURSO_AUTH_TOKEN: "not-a-real-token",
+    });
+    assert.equal(result.status, 0, result.stderr);
+    const parsed = JSON.parse(result.stdout) as { result: string };
+    assert.equal(parsed.result, "SAFE_TO_MERGE");
+    assert.match(result.stderr, /Turso unavailable|fetch failed|ECONNREFUSED|Turso HTTP|aborted|timeout/i);
   });
 });

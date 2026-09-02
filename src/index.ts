@@ -22,6 +22,13 @@ export { verify } from "./core/verification-engine.js";
 export { decide } from "./core/decision-engine.js";
 export { evidenceHash } from "./core/evidence-engine.js";
 export { writeLedger, writeLedgerBundle, readLedger } from "./ledger/decision-ledger.js";
+export {
+  createDecisionStore,
+  FileDecisionStore,
+  TursoDecisionStore,
+  CompositeDecisionStore,
+} from "./store/index.js";
+export type { DecisionStore, SaveResult } from "./store/index.js";
 export { renderReport } from "./report/reporter.js";
 export { renderPrComment } from "./integrations/github-comment.js";
 export { applyGithubProvenance, emitGithub } from "./integrations/github.js";

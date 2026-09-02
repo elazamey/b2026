@@ -104,6 +104,16 @@ describe("PR comment", () => {
     assert.match(markdown, /#7/);
     assert.match(markdown, /sha256:contract/);
     assert.match(markdown, /src\/components\/User.ts:14/);
+    assert.doesNotMatch(markdown, /State ledger/);
+  });
+
+  it("mentions Turso only as a recorded reference, not as the decision authority", () => {
+    const report = reportOf();
+    report.decision.storage = { local: true, turso: "persisted" };
+    const markdown = renderPrComment(report);
+    assert.match(markdown, /State ledger \| Turso/);
+    assert.match(markdown, /Decision ID/);
+    assert.match(markdown, /Deterministic engine decision/);
   });
 
   it("creates a comment when none exists and updates the sticky one later", async () => {

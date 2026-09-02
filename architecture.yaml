@@ -14,8 +14,10 @@ architecture:
     - src/cli.ts
     - src/ledger
     - src/integrations
+    - src/store
     - contracts/architecture.schema.yaml
     - contracts/decision-ledger.schema.yaml
+    - contracts/turso.schema.sql
   forbidden_paths:
     - src/legacy
     - tmp

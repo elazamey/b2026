@@ -9,11 +9,12 @@ import {
   loadContract,
 } from "./core/contract-engine.js";
 import { verify } from "./core/verification-engine.js";
-import { writeLedgerBundle } from "./ledger/decision-ledger.js";
+import { defaultLedgerDir, defaultLedgerPath } from "./ledger/decision-ledger.js";
 import { renderReport } from "./report/reporter.js";
 import { applyGithubProvenance, emitGithub } from "./integrations/github.js";
 import { readGithubContext } from "./integrations/github-context.js";
 import { defaultContractYaml } from "./core/init-template.js";
+import { createDecisionStore } from "./store/create.js";
 
 function help(): string {
   return `
@@ -31,6 +32,7 @@ Options:
   --comment                    Post or update the sticky PR comment
   --no-comment                 Do not post a PR comment
   --pr <number>                Pull request number (defaults to GitHub Actions event)
+  --no-turso                   Do not persist to Turso even if credentials are set
   --no-color                   Disable ANSI colors
   --help                       Show this help
 `.trim();
@@ -49,6 +51,7 @@ export async function main(argv: string[]): Promise<number> {
       comment: { type: "boolean", default: false },
       "no-comment": { type: "boolean", default: false },
       pr: { type: "string" },
+      "no-turso": { type: "boolean", default: false },
     },
   });
 
@@ -94,15 +97,23 @@ export async function main(argv: string[]): Promise<number> {
     process.stdout.write(renderReport(report, { color, json: Boolean(values.json) }));
 
     const extraPath = values.out ? resolve(target, values.out) : undefined;
-    const written = writeLedgerBundle({
+    const store = createDecisionStore({
       root: target,
-      record: report.decision,
       extraPath,
+      env: process.env,
+      disableTurso: Boolean(values["no-turso"]),
     });
+    const saved = await store.saveDecision(report.decision);
+    report.decision = saved.record;
 
     if (!values.json) {
-      process.stdout.write(`Ledger: ${written.decisionPath}\n`);
-      process.stdout.write(`Ledger index: ${written.indexPath}\n\n`);
+      const indexPath = resolve(defaultLedgerDir(target), "index.json");
+      process.stdout.write(`Ledger: ${defaultLedgerPath(target, report.decision)}\n`);
+      process.stdout.write(`Ledger index: ${indexPath}\n`);
+      if (saved.storage.turso === "persisted" || saved.storage.turso === "exists") {
+        process.stdout.write(`Turso: ${saved.storage.turso} (${report.decision.decision_id})\n`);
+      }
+      process.stdout.write("\n");
     }
 
     const shouldComment =
@@ -112,11 +123,7 @@ export async function main(argv: string[]): Promise<number> {
     await emitGithub(report, { comment: shouldComment, context });
 
     if (report.decision.github?.comment_id) {
-      writeLedgerBundle({
-        root: target,
-        record: report.decision,
-        extraPath,
-      });
+      await store.saveDecision(report.decision);
     }
 
     return report.decision.result === "SAFE_TO_MERGE" ? 0 : 1;

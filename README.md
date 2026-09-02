@@ -16,11 +16,16 @@ Turso           → records decisions (v0.3+)
 Google APIs     → isolated external integrations
 ```
 
-v0.2 closes the loop on GitHub:
+v0.3 records state without changing authority:
 
-- Sticky PR comment (markdown table of Evidence + Decision)
-- Auditable Decision Ledger under `.guardian/decisions/`
-- `GITHUB_TOKEN` only — no extra secrets, no OAuth app
+```text
+Git            = source of truth (architecture.yaml)
+Guardian       = decision authority (SAFE TO MERGE / REJECTED)
+Local ledger   = default evidence store
+Turso          = optional remote state/evidence store
+```
+
+`ai-guardian check` still works with no network and no Turso. If Turso is down, the local decision stands.
 
 The core remains deterministic. No LLM is required. AI review is optional and never the merge authority.
 
@@ -168,7 +173,7 @@ The Guardian does not record `PR #182 = PASS`. It records why.
     "head_sha": "a81f3c2..."
   },
   "contract_hash": "sha256:...",
-  "engine_version": "0.2.0",
+  "engine_version": "0.3.0",
   "timestamp": "2026-09-02T12:00:00.000Z",
   "result": "SAFE_TO_MERGE",
   "checks": {
@@ -227,9 +232,47 @@ jobs:
 
 The Action fails the check on `REJECTED`, writes GitHub annotations, posts/updates the PR comment, and exposes `decision`, `violations`, `decision_id`, `contract_hash`, `evidence_hash`, and `pull_request` as outputs.
 
-Vercel, Turso, and Google APIs are not policy planes and are not wired yet.
+Optional Turso persistence uses `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`. They are never required. An unavailable database does not flip `SAFE_TO_MERGE` into `REJECTED`.
 
-## What v0.2 does not do
+## Turso (optional state ledger)
+
+Turso stores scans, decisions, and evidence. It does **not** store the living contract.
+
+```text
+Git
+ └── architecture.yaml
+        ↓
+   contract_hash
+        ↓
+ Guardian Engine
+        ↓
+ Decision
+        ↓
+ Local ledger ──optional──▶ Turso
+```
+
+Each persisted scan keeps:
+
+```text
+repository, commit_sha, contract_hash, engine_version,
+schema_version, timestamp, result, evidence_hash, decision_id
+```
+
+Writes are idempotent on `decision_id`. Sealed fields (`result`, hashes, commit) cannot be overwritten later.
+
+```bash
+# local only — always the default
+npx tsx src/cli.ts check
+
+# optional remote persistence
+export TURSO_DATABASE_URL=libsql://...
+export TURSO_AUTH_TOKEN=...
+npx tsx src/cli.ts check
+```
+
+Schema: [`contracts/turso.schema.sql`](contracts/turso.schema.sql)
+
+## What v0.3 does not do
 
 - No dashboard
 - No LLM merge decision
@@ -242,8 +285,8 @@ Those come later, in this order:
 | Version | Scope |
 | --- | --- |
 | **v0.1** | CLI + GitHub Action |
-| **v0.2** | PR comments + Decision Ledger ← current |
-| **v0.3** | Turso-backed control plane (recorded state only) |
+| **v0.2** | PR comments + Decision Ledger |
+| **v0.3** | Turso state ledger (optional, recorded state only) ← current |
 | **v0.4** | Arena Agent feedback / repair loop |
 | **v0.5** | Vercel deployment gate |
 | **v1.0** | Hosted dashboard + SaaS |
@@ -266,6 +309,10 @@ src/
 │   └── quality.ts
 ├── integrations/
 │   └── github.ts
+├── store/
+│   ├── file-store.ts
+│   ├── turso-store.ts
+│   └── composite-store.ts
 ├── ledger/
 │   └── decision-ledger.ts
 └── report/
