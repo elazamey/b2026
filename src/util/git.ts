@@ -16,6 +16,14 @@ export function detectCommit(root: string): string {
   return git(root, ["rev-parse", "--short=7", "HEAD"]) ?? "unknown";
 }
 
+export function detectCommitSha(root: string): string | undefined {
+  return git(root, ["rev-parse", "HEAD"]) ?? undefined;
+}
+
+export function detectBranch(root: string): string | undefined {
+  return git(root, ["rev-parse", "--abbrev-ref", "HEAD"]) ?? undefined;
+}
+
 export function detectRepository(root: string): string {
   const remote = git(root, ["config", "--get", "remote.origin.url"]);
   if (remote) {

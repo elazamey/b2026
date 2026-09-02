@@ -16,15 +16,13 @@ Turso           → records decisions (v0.3+)
 Google APIs     → isolated external integrations
 ```
 
-v0.1 is the core that must exist before any dashboard:
+v0.2 closes the loop on GitHub:
 
-- Contract schema (`architecture.yaml`)
-- Verification engine
-- Decision model
-- `ai-guardian check`
-- GitHub Action
+- Sticky PR comment (markdown table of Evidence + Decision)
+- Auditable Decision Ledger under `.guardian/decisions/`
+- `GITHUB_TOKEN` only — no extra secrets, no OAuth app
 
-No LLM is required to run the core. AI review is optional and never the merge authority.
+The core remains deterministic. No LLM is required. AI review is optional and never the merge authority.
 
 ## Install
 
@@ -159,11 +157,19 @@ The Guardian does not record `PR #182 = PASS`. It records why.
 
 ```json
 {
+  "schema_version": "0.2",
   "decision_id": "dg_...",
   "repository": "owner/repo",
-  "commit": "a81f...",
+  "commit": "a81f3c2",
+  "commit_sha": "a81f3c2...",
+  "pull_request": {
+    "number": 182,
+    "url": "https://github.com/owner/repo/pull/182",
+    "head_sha": "a81f3c2..."
+  },
   "contract_hash": "sha256:...",
-  "engine_version": "0.1.0",
+  "engine_version": "0.2.0",
+  "timestamp": "2026-09-02T12:00:00.000Z",
   "result": "SAFE_TO_MERGE",
   "checks": {
     "architecture": "PASS",
@@ -177,15 +183,40 @@ The Guardian does not record `PR #182 = PASS`. It records why.
 }
 ```
 
-Default location: `.guardian/decisions/<decision_id>.json`
+Written on every `ai-guardian check`:
 
-`--json` prints the ledger on stdout. `--out <file>` writes it elsewhere.
+```text
+.guardian/decisions/
+├── <decision_id>.json    # sealed record
+├── latest.json           # most recent decision
+└── index.json            # historical index (id, PR, hashes, result)
+```
+
+`--json` prints the ledger on stdout. `--out <file>` copies it elsewhere.
+
+Schema: [`contracts/decision-ledger.schema.yaml`](contracts/decision-ledger.schema.yaml)
+
+## PR comments
+
+On `pull_request`, the Guardian upserts **one sticky comment** marked `<!-- ai-guardian-decision -->`.
+
+It is updated in place as the agent repairs and pushes — closed-loop governance, not a flood of comments.
+
+Authentication is `GITHUB_TOKEN` from GitHub Actions. No extra keys.
+
+```bash
+npx tsx src/cli.ts check --comment --pr 182
+# requires GITHUB_TOKEN and GITHUB_REPOSITORY in the environment
+```
 
 ## GitHub Action
 
 ```yaml
 name: Guardian
 on: [pull_request]
+permissions:
+  contents: read
+  pull-requests: write
 jobs:
   verify:
     runs-on: ubuntu-latest
@@ -194,11 +225,11 @@ jobs:
       - uses: elazamey/b2026@main
 ```
 
-The Action fails the check on `REJECTED`, writes GitHub annotations, and exposes `decision`, `violations`, `decision_id`, and `contract_hash` as outputs.
+The Action fails the check on `REJECTED`, writes GitHub annotations, posts/updates the PR comment, and exposes `decision`, `violations`, `decision_id`, `contract_hash`, `evidence_hash`, and `pull_request` as outputs.
 
-This is the only integration in v0.1. Vercel, Turso, and Google APIs are not policy planes and are not wired yet.
+Vercel, Turso, and Google APIs are not policy planes and are not wired yet.
 
-## What v0.1 does not do
+## What v0.2 does not do
 
 - No dashboard
 - No LLM merge decision
@@ -211,7 +242,7 @@ Those come later, in this order:
 | Version | Scope |
 | --- | --- |
 | **v0.1** | CLI + GitHub Action |
-| **v0.2** | PR comments + Decision Ledger |
+| **v0.2** | PR comments + Decision Ledger ← current |
 | **v0.3** | Turso-backed control plane (recorded state only) |
 | **v0.4** | Arena Agent feedback / repair loop |
 | **v0.5** | Vercel deployment gate |

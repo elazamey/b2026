@@ -5,6 +5,10 @@ on:
   push:
     branches: [main]
 
+permissions:
+  contents: read
+  pull-requests: write
+
 jobs:
   verify:
     name: Deterministic verification
@@ -20,6 +24,8 @@ jobs:
       - run: npm run typecheck
       - run: npm run build
       - name: ai-guardian check
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
         run: node dist/cli.js check --no-color
       - name: Upload decision ledger
         if: always()

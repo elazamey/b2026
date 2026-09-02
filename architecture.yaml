@@ -12,7 +12,10 @@ architecture:
     - src/core
     - src/scanners
     - src/cli.ts
+    - src/ledger
+    - src/integrations
     - contracts/architecture.schema.yaml
+    - contracts/decision-ledger.schema.yaml
   forbidden_paths:
     - src/legacy
     - tmp

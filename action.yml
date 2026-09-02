@@ -17,6 +17,10 @@ inputs:
     description: Print the decision ledger as JSON
     required: false
     default: "false"
+  comment:
+    description: Post or update the sticky PR decision comment using GITHUB_TOKEN
+    required: false
+    default: "true"
 outputs:
   decision:
     description: SAFE_TO_MERGE or REJECTED
@@ -30,6 +34,12 @@ outputs:
   contract_hash:
     description: sha256 of the architecture contract
     value: ${{ steps.guardian.outputs.contract_hash }}
+  evidence_hash:
+    description: sha256 of the sealed decision evidence
+    value: ${{ steps.guardian.outputs.evidence_hash }}
+  pull_request:
+    description: Pull request number when running on a PR
+    value: ${{ steps.guardian.outputs.pull_request }}
 runs:
   using: composite
   steps:
@@ -47,12 +57,19 @@ runs:
       id: guardian
       shell: bash
       working-directory: ${{ github.workspace }}
+      env:
+        GITHUB_TOKEN: ${{ github.token }}
       run: |
         JSON_FLAG=""
         if [ "${{ inputs.json }}" = "true" ]; then
           JSON_FLAG="--json"
         fi
+        COMMENT_FLAG=""
+        if [ "${{ inputs.comment }}" = "false" ]; then
+          COMMENT_FLAG="--no-comment"
+        fi
         node "${{ github.action_path }}/dist/cli.js" check "${{ inputs.path }}" \
           --contract "${{ inputs.contract }}" \
           --no-color \
-          $JSON_FLAG
+          $JSON_FLAG \
+          $COMMENT_FLAG

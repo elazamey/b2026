@@ -133,11 +133,17 @@ export function renderGithubSummary(report: VerificationReport): string {
     rows,
     "",
     `- Repository: \`${report.repository}\``,
-    `- Commit: \`${report.commit}\``,
+    `- Commit: \`${decision.commit_sha ?? report.commit}\``,
+    decision.pull_request
+      ? `- Pull request: \`#${decision.pull_request.number}\``
+      : "",
     `- Contract: \`${report.contract_hash}\``,
     `- Decision ID: \`${decision.decision_id}\``,
     `- Evidence hash: \`${decision.evidence_hash}\``,
-  ].join("\n");
+    `- Timestamp: \`${decision.timestamp}\``,
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
 function titleCase(value: string): string {

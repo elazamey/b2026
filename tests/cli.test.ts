@@ -11,7 +11,13 @@ function run(args: string[]): { status: number; stdout: string; stderr: string }
   const result = spawnSync(tsx, [cli, ...args], {
     cwd: repo,
     encoding: "utf8",
-    env: { ...process.env, FORCE_COLOR: "0" },
+    env: {
+      ...process.env,
+      FORCE_COLOR: "0",
+      GITHUB_ACTIONS: "",
+      GITHUB_TOKEN: "",
+      GH_TOKEN: "",
+    },
   });
   return {
     status: result.status ?? 1,
@@ -24,7 +30,7 @@ describe("ai-guardian CLI", () => {
   it("prints the engine version", () => {
     const result = run(["version"]);
     assert.equal(result.status, 0);
-    assert.match(result.stdout, /0\.1\.0/);
+    assert.match(result.stdout, /0\.2\.0/);
   });
 
   it("emits a decision ledger JSON for the passing fixture", () => {

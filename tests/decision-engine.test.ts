@@ -69,6 +69,8 @@ describe("decision-engine", () => {
     });
     assert.equal(record.result, "REJECTED");
     assert.equal(record.violations.every((finding) => finding.id === "SEC-001"), true);
-    assert.equal(record.engine_version, "0.1.0");
+    assert.equal(record.engine_version, "0.2.0");
+    assert.equal(record.schema_version, "0.2");
+    assert.equal(record.pull_request, null);
   });
 });

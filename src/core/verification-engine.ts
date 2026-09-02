@@ -1,7 +1,7 @@
 import type { CheckResult, ScanContext, VerificationReport } from "../types.js";
 import { SCANNERS } from "../scanners/index.js";
 import { walkFiles } from "../util/files.js";
-import { detectCommit, detectRepository } from "../util/git.js";
+import { detectBranch, detectCommit, detectCommitSha, detectRepository } from "../util/git.js";
 import { contractHash } from "./contract-engine.js";
 import { decide } from "./decision-engine.js";
 
@@ -40,6 +40,8 @@ export function verify(ctx: Omit<ScanContext, "files">): VerificationReport {
     contract: ctx.contract,
     repository,
     commit,
+    commitSha: detectCommitSha(ctx.root),
+    branch: detectBranch(ctx.root),
     contractHash: hash,
     contractPath: "architecture.yaml",
   });

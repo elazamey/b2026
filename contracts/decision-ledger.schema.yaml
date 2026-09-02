@@ -1,0 +1,90 @@
+$schema: "https://json-schema.org/draft/2020-12/schema"
+title: AI Guardian Decision Ledger
+description: >
+  Auditable record of a deterministic merge decision.
+  Git remains the source of truth for architecture.yaml; this ledger records
+  why a specific commit was allowed or rejected.
+type: object
+required:
+  - schema_version
+  - decision_id
+  - repository
+  - commit
+  - contract_hash
+  - engine_version
+  - timestamp
+  - result
+  - checks
+  - violations
+  - evidence_hash
+properties:
+  schema_version:
+    const: "0.2"
+  decision_id:
+    type: string
+    pattern: "^dg_"
+  repository:
+    type: string
+  commit:
+    type: string
+  commit_sha:
+    type: string
+  branch:
+    type: string
+  pull_request:
+    oneOf:
+      - type: "null"
+      - type: object
+        required: [number]
+        properties:
+          number:
+            type: integer
+          url:
+            type: string
+          head_sha:
+            type: string
+          head_ref:
+            type: string
+          base_ref:
+            type: string
+  github:
+    oneOf:
+      - type: "null"
+      - type: object
+        properties:
+          event_name:
+            type: string
+          actor:
+            type: string
+          run_id:
+            type: string
+          run_url:
+            type: string
+          comment_id:
+            type: integer
+          comment_url:
+            type: string
+  contract_path:
+    type: string
+  contract_hash:
+    type: string
+    pattern: "^sha256:"
+  engine_version:
+    type: string
+  timestamp:
+    type: string
+    format: date-time
+  result:
+    enum: [SAFE_TO_MERGE, REJECTED]
+  checks:
+    type: object
+    additionalProperties:
+      enum: [PASS, FAIL, WARN, SKIP, ERROR]
+  violations:
+    type: array
+    items:
+      type: object
+      required: [id, rule, severity, message]
+  evidence_hash:
+    type: string
+    pattern: "^sha256:"

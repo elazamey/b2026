@@ -1,4 +1,6 @@
-export const ENGINE_VERSION = "0.1.0";
+export const ENGINE_VERSION = "0.2.0";
+
+export const LEDGER_SCHEMA_VERSION = "0.2";
 
 export type CheckName =
   | "architecture"
@@ -93,10 +95,32 @@ export interface ScanContext {
   files: string[];
 }
 
+export interface PullRequestRef {
+  number: number;
+  url?: string;
+  head_sha?: string;
+  head_ref?: string;
+  base_ref?: string;
+}
+
+export interface GithubProvenance {
+  event_name?: string;
+  actor?: string;
+  run_id?: string;
+  run_url?: string;
+  comment_id?: number;
+  comment_url?: string;
+}
+
 export interface DecisionRecord {
+  schema_version: typeof LEDGER_SCHEMA_VERSION;
   decision_id: string;
   repository: string;
   commit: string;
+  commit_sha?: string;
+  branch?: string;
+  pull_request: PullRequestRef | null;
+  github: GithubProvenance | null;
   contract_path: string;
   contract_hash: string;
   engine_version: string;
@@ -113,6 +137,26 @@ export interface DecisionRecord {
     checks_skipped: number;
     violation_count: number;
   };
+}
+
+export interface LedgerIndexEntry {
+  decision_id: string;
+  timestamp: string;
+  repository: string;
+  commit: string;
+  commit_sha?: string;
+  result: DecisionResult;
+  pull_request: number | null;
+  contract_hash: string;
+  evidence_hash: string;
+  violation_count: number;
+  path: string;
+}
+
+export interface LedgerIndex {
+  schema_version: typeof LEDGER_SCHEMA_VERSION;
+  updated_at: string;
+  entries: LedgerIndexEntry[];
 }
 
 export interface VerificationReport {

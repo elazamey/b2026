@@ -5,8 +5,10 @@ import type {
   CheckStatus,
   DecisionRecord,
   Finding,
+  GithubProvenance,
+  PullRequestRef,
 } from "../types.js";
-import { ENGINE_VERSION } from "../types.js";
+import { ENGINE_VERSION, LEDGER_SCHEMA_VERSION } from "../types.js";
 import { decisionId } from "../util/id.js";
 import { evidenceHash } from "./evidence-engine.js";
 
@@ -17,11 +19,14 @@ export function decide(input: {
   commit: string;
   contractHash: string;
   contractPath: string;
+  commitSha?: string;
+  branch?: string;
+  pullRequest?: PullRequestRef | null;
+  github?: GithubProvenance | null;
 }): DecisionRecord {
   const required = new Set<CheckName>(input.contract.merge.require);
   const checks: Record<string, CheckStatus> = {};
   const blocking: Finding[] = [];
-  const allFindings: Finding[] = [];
 
   let passed = 0;
   let failed = 0;
@@ -29,7 +34,6 @@ export function decide(input: {
 
   for (const check of input.checks) {
     checks[check.name] = check.status;
-    allFindings.push(...check.findings);
     if (check.status === "PASS") passed += 1;
     if (check.status === "FAIL" || check.status === "ERROR") failed += 1;
     if (check.status === "SKIP") skipped += 1;
@@ -41,9 +45,10 @@ export function decide(input: {
     }
   }
 
-  const result = blocking.length > 0 || requiredFailWithoutFinding(input.checks, required)
-    ? "REJECTED"
-    : "SAFE_TO_MERGE";
+  const result =
+    blocking.length > 0 || requiredFailWithoutFinding(input.checks, required)
+      ? "REJECTED"
+      : "SAFE_TO_MERGE";
 
   const evidence: DecisionRecord["evidence"] = {
     architecture: {},
@@ -58,9 +63,14 @@ export function decide(input: {
   }
 
   const record: DecisionRecord = {
+    schema_version: LEDGER_SCHEMA_VERSION,
     decision_id: decisionId(),
     repository: input.repository,
     commit: input.commit,
+    commit_sha: input.commitSha,
+    branch: input.branch,
+    pull_request: input.pullRequest ?? null,
+    github: input.github ?? null,
     contract_path: input.contractPath,
     contract_hash: input.contractHash,
     engine_version: ENGINE_VERSION,

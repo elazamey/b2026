@@ -9,9 +9,10 @@ import {
   loadContract,
 } from "./core/contract-engine.js";
 import { verify } from "./core/verification-engine.js";
-import { writeLedger, defaultLedgerPath } from "./ledger/decision-ledger.js";
+import { writeLedgerBundle } from "./ledger/decision-ledger.js";
 import { renderReport } from "./report/reporter.js";
-import { emitGithub } from "./integrations/github.js";
+import { applyGithubProvenance, emitGithub } from "./integrations/github.js";
+import { readGithubContext } from "./integrations/github-context.js";
 import { defaultContractYaml } from "./core/init-template.js";
 
 function help(): string {
@@ -27,6 +28,9 @@ Options:
   --contract <file>            Contract path (default: architecture.yaml)
   --json                       Machine-readable decision ledger on stdout
   --out <file>                 Write the decision ledger JSON to a file
+  --comment                    Post or update the sticky PR comment
+  --no-comment                 Do not post a PR comment
+  --pr <number>                Pull request number (defaults to GitHub Actions event)
   --no-color                   Disable ANSI colors
   --help                       Show this help
 `.trim();
@@ -42,6 +46,9 @@ export async function main(argv: string[]): Promise<number> {
       out: { type: "string" },
       help: { type: "boolean", default: false },
       "no-color": { type: "boolean", default: false },
+      comment: { type: "boolean", default: false },
+      "no-comment": { type: "boolean", default: false },
+      pr: { type: "string" },
     },
   });
 
@@ -73,20 +80,45 @@ export async function main(argv: string[]): Promise<number> {
     const report = verify({ root: target, contract });
     report.decision.contract_path = contractPath;
 
+    const prNumber = parsePr(values.pr);
+    const context = readGithubContext(process.env, {
+      pullRequest: prNumber,
+    });
+    applyGithubProvenance(report.decision, context);
+    report.repository = report.decision.repository;
+    report.commit = report.decision.commit;
+    report.contract_hash = report.decision.contract_hash;
+
     const color =
       !values["no-color"] && Boolean(process.stdout.isTTY) && !values.json;
     process.stdout.write(renderReport(report, { color, json: Boolean(values.json) }));
 
-    const outPath = values.out
-      ? resolve(target, values.out)
-      : defaultLedgerPath(target, report.decision);
-    writeLedger(outPath, report.decision);
+    const extraPath = values.out ? resolve(target, values.out) : undefined;
+    const written = writeLedgerBundle({
+      root: target,
+      record: report.decision,
+      extraPath,
+    });
 
     if (!values.json) {
-      process.stdout.write(`Ledger: ${outPath}\n\n`);
+      process.stdout.write(`Ledger: ${written.decisionPath}\n`);
+      process.stdout.write(`Ledger index: ${written.indexPath}\n\n`);
     }
 
-    emitGithub(report);
+    const shouldComment =
+      !values["no-comment"] &&
+      (values.comment || Boolean(context?.inActions && context.pullRequest));
+
+    await emitGithub(report, { comment: shouldComment, context });
+
+    if (report.decision.github?.comment_id) {
+      writeLedgerBundle({
+        root: target,
+        record: report.decision,
+        extraPath,
+      });
+    }
+
     return report.decision.result === "SAFE_TO_MERGE" ? 0 : 1;
   } catch (error) {
     if (error instanceof ContractError) {
@@ -99,6 +131,15 @@ export async function main(argv: string[]): Promise<number> {
     process.stderr.write(`${error instanceof Error ? error.message : String(error)}\n`);
     return 2;
   }
+}
+
+function parsePr(value?: string): number | undefined {
+  if (!value) return undefined;
+  const parsed = Number.parseInt(value, 10);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new Error(`Invalid --pr value: ${value}`);
+  }
+  return parsed;
 }
 
 function runInit(target: string, contractFlag?: string): number {
