@@ -20,6 +20,10 @@ export function detectCommitSha(root: string): string | undefined {
   return git(root, ["rev-parse", "HEAD"]) ?? undefined;
 }
 
+export function detectParentCommitSha(root: string): string | undefined {
+  return git(root, ["rev-parse", "HEAD^"]) ?? undefined;
+}
+
 export function detectBranch(root: string): string | undefined {
   return git(root, ["rev-parse", "--abbrev-ref", "HEAD"]) ?? undefined;
 }

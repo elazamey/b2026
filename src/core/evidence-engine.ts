@@ -17,6 +17,16 @@ export function evidenceHash(
     checks: record.checks,
     violations: record.violations,
     evidence: record.evidence,
+    lineage: record.lineage
+      ? {
+          original_decision_id: record.lineage.original_decision_id,
+          parent_decision_id: record.lineage.parent_decision_id,
+          repair_attempt: record.lineage.repair_attempt,
+          parent_commit_sha: record.lineage.parent_commit_sha,
+          new_commit_sha: record.lineage.new_commit_sha,
+          contract_hash_locked: record.lineage.contract_hash_locked,
+        }
+      : null,
   };
   return sha256Prefixed(canonicalJson(payload));
 }

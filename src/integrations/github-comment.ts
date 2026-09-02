@@ -1,5 +1,6 @@
 import type { CheckResult, DecisionRecord, Finding, VerificationReport } from "../types.js";
 import { COMMENT_MARKER } from "./github-api.js";
+import { buildFindingsPack } from "../loop/findings-pack.js";
 
 const CHECK_ORDER = [
   "architecture",
@@ -50,6 +51,26 @@ export function renderPrComment(report: VerificationReport): string {
     lines.push(`| Workflow run | [run](${decision.github.run_url}) |`);
   }
   lines.push("");
+  if (!passed) {
+    const pack = buildFindingsPack(decision);
+    lines.push("### Repair instructions for coding agents", "");
+    lines.push("GitHub is the event bus. Guardian does not call the agent.");
+    lines.push("");
+    lines.push("- Do **not** edit `architecture.yaml` to bypass a finding.");
+    lines.push("- Do **not** declare `SAFE_TO_MERGE`.");
+    lines.push("- Create a **new commit**, then push. Guardian will re-check.");
+    lines.push("");
+    lines.push("<details>");
+    lines.push("<summary>Machine-readable findings</summary>");
+    lines.push("");
+    lines.push("```json");
+    lines.push(JSON.stringify(pack, null, 2));
+    lines.push("```");
+    lines.push("");
+    lines.push("</details>");
+    lines.push("");
+  }
+
   lines.push(
     passed
       ? "_Deterministic engine decision. The coding agent did not authorize this merge._"

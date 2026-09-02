@@ -1,4 +1,4 @@
-export const ENGINE_VERSION = "0.3.0";
+export const ENGINE_VERSION = "0.4.0";
 
 export const LEDGER_SCHEMA_VERSION = "0.2";
 
@@ -117,6 +117,16 @@ export interface DecisionStorageState {
   turso?: "persisted" | "unavailable" | "skipped" | "exists";
 }
 
+export interface RepairLineage {
+  original_decision_id: string;
+  parent_decision_id: string;
+  repair_attempt_id: string;
+  repair_attempt: number;
+  parent_commit_sha: string;
+  new_commit_sha: string;
+  contract_hash_locked: string;
+}
+
 export interface DecisionRecord {
   schema_version: typeof LEDGER_SCHEMA_VERSION;
   decision_id: string;
@@ -127,6 +137,7 @@ export interface DecisionRecord {
   pull_request: PullRequestRef | null;
   github: GithubProvenance | null;
   storage?: DecisionStorageState;
+  lineage?: RepairLineage;
   contract_path: string;
   contract_hash: string;
   engine_version: string;
@@ -156,6 +167,8 @@ export interface LedgerIndexEntry {
   contract_hash: string;
   evidence_hash: string;
   violation_count: number;
+  original_decision_id?: string;
+  repair_attempt_id?: string;
   path: string;
 }
 

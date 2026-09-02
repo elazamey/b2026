@@ -65,6 +65,8 @@ function upsertIndex(
     contract_hash: record.contract_hash,
     evidence_hash: record.evidence_hash,
     violation_count: record.summary.violation_count,
+    original_decision_id: record.lineage?.original_decision_id,
+    repair_attempt_id: record.lineage?.repair_attempt_id,
     path: toPosix(relative(root, decisionPath)),
   };
   const entries = [

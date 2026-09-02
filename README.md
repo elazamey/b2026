@@ -16,18 +16,21 @@ Turso           → records decisions (v0.3+)
 Google APIs     → isolated external integrations
 ```
 
-v0.3 records state without changing authority:
+v0.4 adds the Arena repair loop **around** the Guardian, not inside it:
 
 ```text
 Git            = source of truth (architecture.yaml)
 Guardian       = decision authority (SAFE TO MERGE / REJECTED)
-Local ledger   = default evidence store
+GitHub         = event bus (check + sticky comment + findings pack)
+Arena Agent    = executor only — never the merge authority
 Turso          = optional remote state/evidence store
 ```
 
-`ai-guardian check` still works with no network and no Turso. If Turso is down, the local decision stands.
+The agent may repair and push a **new commit**. It cannot edit `architecture.yaml` to bypass a finding, cannot declare `SAFE TO MERGE`, and cannot rewrite a previous decision. Each re-check writes a **new** ledger record with lineage:
 
-The core remains deterministic. No LLM is required. AI review is optional and never the merge authority.
+```text
+original_decision_id → repair_attempt_id → parent_commit_sha → new_commit_sha
+```
 
 ## Install
 
@@ -173,7 +176,7 @@ The Guardian does not record `PR #182 = PASS`. It records why.
     "head_sha": "a81f3c2..."
   },
   "contract_hash": "sha256:...",
-  "engine_version": "0.3.0",
+  "engine_version": "0.4.0",
   "timestamp": "2026-09-02T12:00:00.000Z",
   "result": "SAFE_TO_MERGE",
   "checks": {
@@ -272,7 +275,24 @@ npx tsx src/cli.ts check
 
 Schema: [`contracts/turso.schema.sql`](contracts/turso.schema.sql)
 
-## What v0.3 does not do
+## Repair loop (v0.4)
+
+Guardian does **not** call Arena. GitHub carries the event:
+
+```text
+PR → Guardian check → REJECTED → sticky comment + findings pack
+  → Agent reads findings → new commit → push
+  → GitHub → Guardian again
+```
+
+```bash
+npx tsx src/cli.ts check
+npx tsx src/cli.ts findings --json
+```
+
+A repair that changes `architecture.yaml` is rejected with `CTR-001` even if every other check would pass.
+
+## What v0.4 does not do
 
 - No dashboard
 - No LLM merge decision
@@ -286,8 +306,8 @@ Those come later, in this order:
 | --- | --- |
 | **v0.1** | CLI + GitHub Action |
 | **v0.2** | PR comments + Decision Ledger |
-| **v0.3** | Turso state ledger (optional, recorded state only) ← current |
-| **v0.4** | Arena Agent feedback / repair loop |
+| **v0.3** | Turso state ledger (optional, recorded state only) |
+| **v0.4** | Arena Agent feedback / repair loop ← current |
 | **v0.5** | Vercel deployment gate |
 | **v1.0** | Hosted dashboard + SaaS |
 

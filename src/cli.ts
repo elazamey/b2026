@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { existsSync, mkdirSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { parseArgs } from "node:util";
 import { dirname, resolve } from "node:path";
 import { ENGINE_VERSION } from "./types.js";
@@ -15,6 +15,9 @@ import { applyGithubProvenance, emitGithub } from "./integrations/github.js";
 import { readGithubContext } from "./integrations/github-context.js";
 import { defaultContractYaml } from "./core/init-template.js";
 import { createDecisionStore } from "./store/create.js";
+import { applyRepairLoop } from "./loop/apply.js";
+import { buildFindingsPack, writeFindingsPack } from "./loop/findings-pack.js";
+import { detectParentCommitSha } from "./util/git.js";
 
 function help(): string {
   return `
@@ -22,6 +25,7 @@ AI Architecture & Engineering Guardian
 
 Usage:
   ai-guardian check [path]     Verify a repository against architecture.yaml
+  ai-guardian findings [path]  Print the latest machine-readable findings pack
   ai-guardian init [path]      Write a starter architecture.yaml contract
   ai-guardian version          Print engine version
 
@@ -72,6 +76,10 @@ export async function main(argv: string[]): Promise<number> {
     return runInit(target, values.contract);
   }
 
+  if (command === "findings") {
+    return runFindings(target, Boolean(values.json));
+  }
+
   if (command !== "check") {
     process.stderr.write(`Unknown command: ${command}\n\n${help()}\n`);
     return 2;
@@ -92,10 +100,6 @@ export async function main(argv: string[]): Promise<number> {
     report.commit = report.decision.commit;
     report.contract_hash = report.decision.contract_hash;
 
-    const color =
-      !values["no-color"] && Boolean(process.stdout.isTTY) && !values.json;
-    process.stdout.write(renderReport(report, { color, json: Boolean(values.json) }));
-
     const extraPath = values.out ? resolve(target, values.out) : undefined;
     const store = createDecisionStore({
       root: target,
@@ -103,13 +107,25 @@ export async function main(argv: string[]): Promise<number> {
       env: process.env,
       disableTurso: Boolean(values["no-turso"]),
     });
+    const previous = await store.getLatest(report.decision.repository);
+    applyRepairLoop(report, {
+      previous,
+      parentCommitSha: detectParentCommitSha(target),
+    });
+
+    const color =
+      !values["no-color"] && Boolean(process.stdout.isTTY) && !values.json;
+    process.stdout.write(renderReport(report, { color, json: Boolean(values.json) }));
+
     const saved = await store.saveDecision(report.decision);
     report.decision = saved.record;
+    const findingsPath = writeFindingsPack(target, buildFindingsPack(report.decision));
 
     if (!values.json) {
       const indexPath = resolve(defaultLedgerDir(target), "index.json");
       process.stdout.write(`Ledger: ${defaultLedgerPath(target, report.decision)}\n`);
       process.stdout.write(`Ledger index: ${indexPath}\n`);
+      process.stdout.write(`Findings: ${findingsPath}\n`);
       if (saved.storage.turso === "persisted" || saved.storage.turso === "exists") {
         process.stdout.write(`Turso: ${saved.storage.turso} (${report.decision.decision_id})\n`);
       }
@@ -158,6 +174,21 @@ function runInit(target: string, contractFlag?: string): number {
   mkdirSync(dirname(dest), { recursive: true });
   writeFileSync(dest, defaultContractYaml(), "utf8");
   process.stdout.write(`Wrote contract ${dest}\n`);
+  return 0;
+}
+
+function runFindings(target: string, json: boolean): number {
+  const latest = resolve(target, ".guardian", "findings", "latest.json");
+  if (!existsSync(latest)) {
+    process.stderr.write("No findings pack found. Run `ai-guardian check` first.\n");
+    return 2;
+  }
+  const raw = readFileSync(latest, "utf8");
+  if (json) {
+    process.stdout.write(raw.endsWith("\n") ? raw : `${raw}\n`);
+    return 0;
+  }
+  process.stdout.write(raw.endsWith("\n") ? raw : `${raw}\n`);
   return 0;
 }
 

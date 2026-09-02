@@ -15,6 +15,7 @@ architecture:
     - src/ledger
     - src/integrations
     - src/store
+    - src/loop
     - contracts/architecture.schema.yaml
     - contracts/decision-ledger.schema.yaml
     - contracts/turso.schema.sql

@@ -33,3 +33,4 @@ export { renderReport } from "./report/reporter.js";
 export { renderPrComment } from "./integrations/github-comment.js";
 export { applyGithubProvenance, emitGithub } from "./integrations/github.js";
 export { createGithubClient, upsertDecisionComment } from "./integrations/github-api.js";
+export { applyRepairLoop, buildFindingsPack } from "./loop/index.js";
