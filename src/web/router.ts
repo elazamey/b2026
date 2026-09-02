@@ -1,15 +1,15 @@
-import type { ControlPlaneReader } from "../control-plane/types.js";
+import type { ControlPlaneReader, ControlPlaneSnapshot } from "../control-plane/types.js";
 import { handleControlPlaneRequest, type PlaneRequest, type PlaneResponse } from "../control-plane/http.js";
-import { renderPublicPage, type PublicPage } from "./html.js";
 import {
   canAccessAdmin,
   canAccessApp,
-  parseForm,
-  parseRole,
-  readRole,
-  sessionCookie,
-  type Role,
-} from "./roles.js";
+  visibleRepositories,
+} from "../identity/authorize.js";
+import { clearSessionCookie, readSessionToken, sessionCookie } from "../identity/cookie.js";
+import { MemoryIdentityStore } from "../identity/store.js";
+import type { IdentityStore, Principal } from "../identity/types.js";
+import { renderPublicPage, type PublicPage } from "./html.js";
+import { headerValue, parseForm } from "./roles.js";
 
 const DECISION_MUTATION_BLOCK =
   "This product UI cannot change Guardian decisions. Guardian → DECIDE. GitHub → ENFORCE.";
@@ -17,36 +17,42 @@ const DECISION_MUTATION_BLOCK =
 export async function handleSiteRequest(
   request: PlaneRequest,
   reader: ControlPlaneReader,
+  identity: IdentityStore = new MemoryIdentityStore(),
 ): Promise<PlaneResponse> {
   const method = request.method.toUpperCase();
   const url = new URL(request.url, "http://guardian.local");
   const pathname = normalizePath(url.pathname);
-  const role = readRole(request.headers);
+  const token = readSessionToken(headerValue(request.headers, "cookie") || null);
+  const principal = await identity.getPrincipal(token);
 
   if (pathname === "/health") {
     return json(200, { ok: true, writable: false, product: "ai-guardian" });
   }
 
   if (pathname === "/login" || pathname === "/register") {
+    const pageName = pathname === "/login" ? "login" : "register";
     if (method === "POST") {
-      return signIn(request.body ?? "");
+      return pageName === "login"
+        ? signIn(identity, request.body ?? "")
+        : register(identity, request.body ?? "");
     }
     if (method !== "GET" && method !== "HEAD") {
       return text(405, DECISION_MUTATION_BLOCK, { Allow: "GET, HEAD, POST" });
     }
-    return html(200, renderPublicPage({ name: pathname === "/login" ? "login" : "register" }, null, role));
+    return html(200, renderPublicPage({ name: pageName }, null, principal));
   }
 
   if (pathname === "/logout") {
     if (method !== "POST" && method !== "GET") {
       return text(405, DECISION_MUTATION_BLOCK, { Allow: "GET, POST" });
     }
-    return redirect("/", sessionCookie("anonymous"));
+    if (token) await identity.revokeSession(token);
+    return redirect("/", clearSessionCookie());
   }
 
   if (pathname === "/admin" || pathname.startsWith("/admin/")) {
-    if (!canAccessAdmin(role)) {
-      return html(403, renderPublicPage({ name: "forbidden" }, null, role));
+    if (!canAccessAdmin(principal)) {
+      return html(403, renderPublicPage({ name: "forbidden" }, null, principal));
     }
     const inner = pathname === "/admin" ? "/" : pathname.slice("/admin".length);
     return handleControlPlaneRequest(
@@ -56,37 +62,42 @@ export async function handleSiteRequest(
     );
   }
 
+  if (pathname === "/app/projects" && method === "POST") {
+    if (!canAccessApp(principal) || !principal) return redirect("/login");
+    return createProject(identity, principal, request.body ?? "");
+  }
+
   const appPage = resolveApp(pathname);
   if (appPage) {
-    if (!canAccessApp(role)) {
+    if (!canAccessApp(principal) || !principal) {
       return redirect("/login");
     }
     if (method !== "GET" && method !== "HEAD") {
       return text(405, DECISION_MUTATION_BLOCK, { Allow: "GET, HEAD" });
     }
-    const snapshot = await reader.snapshot();
-    return html(200, renderPublicPage(appPage, snapshot, role));
+    const snapshot = scopedSnapshot(await reader.snapshot(), principal);
+    return html(200, renderPublicPage(appPage, snapshot, principal));
   }
 
   if (pathname === "/settings") {
-    if (!canAccessApp(role)) return redirect("/login");
+    if (!canAccessApp(principal) || !principal) return redirect("/login");
     if (method !== "GET" && method !== "HEAD") {
       return text(405, DECISION_MUTATION_BLOCK, { Allow: "GET, HEAD" });
     }
-    return html(200, renderPublicPage({ name: "settings", role }, null, role));
+    return html(200, renderPublicPage({ name: "settings" }, null, principal));
   }
 
   if (pathname === "/") {
     if (method !== "GET" && method !== "HEAD") {
       return text(405, DECISION_MUTATION_BLOCK, { Allow: "GET, HEAD" });
     }
-    return html(200, renderPublicPage({ name: "home" }, null, role));
+    return html(200, renderPublicPage({ name: "home" }, null, principal));
   }
 
   if (method !== "GET" && method !== "HEAD") {
     return text(405, DECISION_MUTATION_BLOCK, { Allow: "GET, HEAD" });
   }
-  return html(404, renderPublicPage({ name: "not-found" }, null, role));
+  return html(404, renderPublicPage({ name: "not-found" }, null, principal));
 }
 
 function resolveApp(pathname: string): PublicPage | null {
@@ -101,13 +112,62 @@ function resolveApp(pathname: string): PublicPage | null {
   return null;
 }
 
-function signIn(body: string): PlaneResponse {
+async function signIn(identity: IdentityStore, body: string): Promise<PlaneResponse> {
   const form = parseForm(body);
-  const role = parseRole(form.role);
-  if (!role) {
-    return text(400, "Unknown role. Use user, developer, or owner.");
+  void form.role;
+  const user = await identity.authenticate(form.email ?? "", form.password ?? "");
+  if (!user) {
+    return html(401, renderPublicPage({ name: "login", error: "Invalid email or password." }, null, null));
   }
-  return redirect("/app", sessionCookie(role));
+  const { token } = await identity.createSession(user.id);
+  return redirect("/app", sessionCookie(token));
+}
+
+async function register(identity: IdentityStore, body: string): Promise<PlaneResponse> {
+  const form = parseForm(body);
+  void form.role;
+  try {
+    const user = await identity.createUser({
+      email: form.email ?? "",
+      password: form.password ?? "",
+    });
+    const { token } = await identity.createSession(user.id);
+    return redirect("/app", sessionCookie(token));
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not create account.";
+    return html(400, renderPublicPage({ name: "register", error: message }, null, null));
+  }
+}
+
+async function createProject(
+  identity: IdentityStore,
+  principal: Principal,
+  body: string,
+): Promise<PlaneResponse> {
+  const form = parseForm(body);
+  try {
+    const project = await identity.createProject({
+      name: form.name ?? "",
+      repository: form.repository ?? "",
+      ownerId: principal.user.id,
+    });
+    return redirect(`/app/projects/${encodeURIComponent(project.id)}`);
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Could not create project.";
+    return text(400, message);
+  }
+}
+
+function scopedSnapshot(snapshot: ControlPlaneSnapshot, principal: Principal): ControlPlaneSnapshot {
+  const allowed = visibleRepositories(principal);
+  return {
+    ...snapshot,
+    writable: false,
+    repositories: snapshot.repositories.filter((row) => allowed.has(row.id)),
+    decisions: snapshot.decisions.filter((row) => allowed.has(row.repository)),
+    findings: snapshot.findings.filter((row) => allowed.has(row.repository)),
+    audit: snapshot.audit.filter((row) => allowed.has(row.repository)),
+  };
 }
 
 function normalizePath(pathname: string): string {
@@ -165,5 +225,3 @@ function redirect(location: string, cookie?: string): PlaneResponse {
     body: "",
   };
 }
-
-export type { Role };

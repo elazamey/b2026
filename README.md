@@ -176,7 +176,7 @@ The Guardian does not record `PR #182 = PASS`. It records why.
     "head_sha": "a81f3c2..."
   },
   "contract_hash": "sha256:...",
-  "engine_version": "0.7.1",
+  "engine_version": "0.7.2",
   "timestamp": "2026-09-02T12:00:00.000Z",
   "result": "SAFE_TO_MERGE",
   "checks": {
@@ -326,7 +326,7 @@ Arena     → REPAIR
 
 Routes: `/repositories`, `/repository/:id`, `/decisions`, `/decision/:id`, `/findings`, `/audit`.
 
-Admin Control Plane lives at `/admin` (owners). The public product is `/` and `/app`. Setup: [`docs/control-plane.md`](docs/control-plane.md), [`docs/public-ui.md`](docs/public-ui.md). Enable the merge lock: [`docs/github-gate.md`](docs/github-gate.md).
+Admin Control Plane lives at `/admin` (`platform_admin` session only). The public product is `/` and `/app`. Setup: [`docs/control-plane.md`](docs/control-plane.md), [`docs/public-ui.md`](docs/public-ui.md), [`docs/identity.md`](docs/identity.md). Enable the merge lock: [`docs/github-gate.md`](docs/github-gate.md).
 
 ## Vercel hosting (v0.7)
 
@@ -364,7 +364,8 @@ Those come later, in this order:
 | **v0.5** | Required GitHub gate (`ai-guardian`) |
 | **v0.6** | Web Control Plane (reads Turso, does not decide) |
 | **v0.7** | Free Vercel hosting for the Control Plane |
-| **v0.7.1** | Public user frontend (`/`, `/app`) + admin `/admin` ← current |
+| **v0.7.1** | Public user frontend (`/`, `/app`) + admin `/admin` |
+| **v0.7.2** | Identity & authorization (server session, Role ≠ Ownership) ← current |
 | **v0.8** | Gemini optional reviewer (never the gate) |
 | **v0.9** | Multi-agent / provider abstraction |
 | **v1.0** | Open Core + free hosted MVP |
@@ -372,7 +373,7 @@ Those come later, in this order:
 ## Layout
 
 ```text
-src/           core, scanners, gate, agents, control-plane
+src/           core, scanners, gate, agents, control-plane, identity, web
 api/plane.ts   Vercel adapter (read-only, not Guardian)
 vercel.json    Hobby hosting for the Control Plane
 ```

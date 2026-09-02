@@ -12,7 +12,7 @@ Arena     → REPAIR
 
 ## What you can see
 
-Mounted at **`/admin`** on the product host. `/` is the public user site.
+Mounted at **`/admin`** on the product host for `platform_admin` sessions only. Project ownership is not enough. `/` is the public user site.
 
 | Route | Content |
 | --- | --- |

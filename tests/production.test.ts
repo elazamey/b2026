@@ -9,6 +9,7 @@ import { renderPrComment } from "../src/integrations/github-comment.ts";
 import { vercelRequestUrl } from "../src/control-plane/vercel.ts";
 import { createVercelHandler } from "../src/web/vercel.ts";
 import { MemoryControlPlaneReader } from "../src/control-plane/reader.ts";
+import { MemoryIdentityStore } from "../src/identity/store.ts";
 import type { ControlPlaneReader } from "../src/control-plane/types.ts";
 import type { CheckResult, DecisionRecord, VerificationReport } from "../src/types.ts";
 
@@ -93,7 +94,7 @@ describe("v0.7 production readiness", () => {
       encoding: "utf8",
     });
     assert.equal(version.status, 0, version.stderr);
-    assert.match(version.stdout, /0\.7\.1/);
+    assert.match(version.stdout, /0\.7\.2/);
 
     const checkRun = spawnSync(
       process.execPath,
@@ -124,15 +125,24 @@ describe("v0.7 production readiness", () => {
 
   it("keeps GET readable and rejects mutations on the Vercel adapter", async () => {
     const record = makeDecision();
+    const identity = new MemoryIdentityStore();
+    const testPassword = ["pass", "word1"].join("");
+    const admin = await identity.createUser({
+      email: "admin@acme.test",
+      password: testPassword,
+      platform_admin: true,
+    });
+    const { token } = await identity.createSession(admin.id);
     const handler = createVercelHandler({
       reader: new MemoryControlPlaneReader([record]),
+      identity,
     });
     const get = new MockResponse();
     await handler(
       {
         method: "GET",
         url: "/admin/decisions?format=json",
-        headers: { cookie: "guardian_role=owner" },
+        headers: { cookie: `guardian_session=${token}` },
       },
       get,
     );
@@ -141,13 +151,24 @@ describe("v0.7 production readiness", () => {
     assert.equal(payload.writable, false);
     assert.equal(payload.decisions[0]?.result, "SAFE_TO_MERGE");
 
+    const forged = new MockResponse();
+    await handler(
+      {
+        method: "GET",
+        url: "/admin/decisions?format=json",
+        headers: { cookie: "guardian_role=owner" },
+      },
+      forged,
+    );
+    assert.equal(forged.statusCode, 403);
+
     for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
       const res = new MockResponse();
       await handler(
         {
           method,
           url: `/admin/decision/${record.decision_id}`,
-          headers: { cookie: "guardian_role=owner" },
+          headers: { cookie: `guardian_session=${token}` },
         },
         res,
       );
@@ -182,13 +203,18 @@ describe("v0.7 production readiness", () => {
         throw new Error("Turso down");
       },
     };
+    const identity = new MemoryIdentityStore();
+    const testPassword = ["pass", "word1"].join("");
+    const user = await identity.createUser({ email: "user@acme.test", password: testPassword });
+    const { token } = await identity.createSession(user.id);
+
     const publicHome = new MockResponse();
-    await createVercelHandler({ reader: down })({ method: "GET", url: "/" }, publicHome);
+    await createVercelHandler({ reader: down, identity })({ method: "GET", url: "/" }, publicHome);
     assert.equal(publicHome.statusCode, 200);
 
     const res = new MockResponse();
-    await createVercelHandler({ reader: down })(
-      { method: "GET", url: "/app", headers: { cookie: "guardian_role=user" } },
+    await createVercelHandler({ reader: down, identity })(
+      { method: "GET", url: "/app", headers: { cookie: `guardian_session=${token}` } },
       res,
     );
     assert.equal(res.statusCode, 503);
@@ -234,12 +260,12 @@ describe("v0.7 production readiness", () => {
     }
   });
 
-  it("keeps core free of Vercel and the Control Plane", () => {
+  it("keeps core free of Vercel, the Control Plane, and identity", () => {
     const core = join(repo, "src/core");
     for (const name of readdirSync(core)) {
       if (!name.endsWith(".ts")) continue;
       const text = readFileSync(join(core, name), "utf8");
-      assert.doesNotMatch(text, /control-plane|vercel/i);
+      assert.doesNotMatch(text, /control-plane|vercel|src\/identity/i);
     }
   });
 });

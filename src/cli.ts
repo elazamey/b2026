@@ -20,6 +20,7 @@ import { buildFindingsPack, writeFindingsPack } from "./loop/findings-pack.js";
 import { dispatchRepairTask } from "./agents/dispatch.js";
 import { detectParentCommitSha } from "./util/git.js";
 import { createControlPlaneReader } from "./control-plane/reader.js";
+import { createIdentityStore } from "./identity/store.js";
 import { startSite } from "./web/server.js";
 
 function help(): string {
@@ -201,9 +202,10 @@ async function runPlane(target: string, hostFlag?: string, portFlag?: string): P
     return 2;
   }
   const reader = createControlPlaneReader({ root: target, env: process.env });
-  startSite({ host, port, reader });
+  const identity = createIdentityStore({ root: target, env: process.env });
+  startSite({ host, port, reader, identity });
   process.stdout.write(
-    `AI Guardian site http://${host}:${port}\nPublic /  App /app  Admin /admin\nSource: ${reader.kind}\nUI cannot decide or merge.\n`,
+    `AI Guardian site http://${host}:${port}\nPublic /  App /app  Admin /admin\nSource: ${reader.kind}\nIdentity: server session (cookie is not a role)\nUI cannot decide or merge.\n`,
   );
   await new Promise(() => undefined);
   return 0;

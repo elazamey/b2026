@@ -1,14 +1,18 @@
 import { createServer, type IncomingMessage, type Server, type ServerResponse } from "node:http";
 import type { ControlPlaneReader } from "../control-plane/types.js";
+import type { IdentityStore } from "../identity/types.js";
+import { MemoryIdentityStore } from "../identity/store.js";
 import { handleSiteRequest } from "./router.js";
 
 export function startSite(options: {
   host: string;
   port: number;
   reader: ControlPlaneReader;
+  identity?: IdentityStore;
 }): Server {
+  const identity = options.identity ?? new MemoryIdentityStore();
   const server = createServer((req, res) => {
-    void serve(req, res, options.reader);
+    void serve(req, res, options.reader, identity);
   });
   server.listen(options.port, options.host);
   return server;
@@ -18,6 +22,7 @@ async function serve(
   req: IncomingMessage,
   res: ServerResponse,
   reader: ControlPlaneReader,
+  identity: IdentityStore,
 ): Promise<void> {
   try {
     const body = await readBody(req);
@@ -29,6 +34,7 @@ async function serve(
         body,
       },
       reader,
+      identity,
     );
     res.writeHead(response.status, response.headers);
     res.end(response.body);

@@ -1,12 +1,13 @@
 import { ENGINE_VERSION } from "../types.js";
 import type { ControlPlaneSnapshot, DecisionSummary, FindingRow } from "../control-plane/types.js";
-import { ROLE_CAPABILITIES, type Role } from "./roles.js";
+import { IDENTITY_CAPABILITIES, type Principal, type Project } from "../identity/types.js";
+import { canAccessAdmin, canSeeHashes } from "../identity/authorize.js";
 
 export type PublicPage =
   | { name: "home" }
-  | { name: "login" }
-  | { name: "register" }
-  | { name: "settings"; role: Role }
+  | { name: "login"; error?: string }
+  | { name: "register"; error?: string }
+  | { name: "settings" }
   | { name: "app-overview" }
   | { name: "app-projects" }
   | { name: "app-project"; id: string }
@@ -19,9 +20,9 @@ export type PublicPage =
 export function renderPublicPage(
   page: PublicPage,
   snapshot: ControlPlaneSnapshot | null,
-  role: Role,
+  principal: Principal | null,
 ): string {
-  return shell(pageTitle(page), role, renderBody(page, snapshot, role));
+  return shell(pageTitle(page), principal, renderBody(page, snapshot, principal));
 }
 
 function pageTitle(page: PublicPage): string {
@@ -56,31 +57,31 @@ function pageTitle(page: PublicPage): string {
 function renderBody(
   page: PublicPage,
   snapshot: ControlPlaneSnapshot | null,
-  role: Role,
+  principal: Principal | null,
 ): string {
   switch (page.name) {
     case "home":
       return renderLanding();
     case "login":
-      return renderAuth("Sign in", "/login");
+      return renderAuth("Sign in", "/login", page.error);
     case "register":
-      return renderAuth("Create account", "/register");
+      return renderAuth("Create account", "/register", page.error);
     case "settings":
-      return renderSettings(role);
+      return renderSettings(principal);
     case "app-overview":
-      return renderOverview(snapshot);
+      return renderOverview(snapshot, principal);
     case "app-projects":
-      return renderProjects(snapshot);
+      return renderProjects(snapshot, principal);
     case "app-project":
-      return renderProject(page.id, snapshot);
+      return renderProject(page.id, snapshot, principal);
     case "app-scans":
-      return renderScans(snapshot, role);
+      return renderScans(snapshot, principal);
     case "app-findings":
-      return renderFindings(snapshot, role);
+      return renderFindings(snapshot, principal);
     case "app-activity":
       return renderActivity(snapshot);
     case "forbidden":
-      return `<section class="panel"><h1>Owner only</h1><p>The Control Plane is not part of the user product.</p></section>`;
+      return `<section class="panel"><h1>Platform admin only</h1><p>Project ownership is not platform administration. The Control Plane is not part of the user product.</p></section>`;
     default:
       return `<section class="panel"><h1>Not found</h1></section>`;
   }
@@ -108,119 +109,141 @@ function renderLanding(): string {
 </section>`;
 }
 
-function renderAuth(title: string, action: string): string {
+function renderAuth(title: string, action: string, error?: string): string {
+  const errorLine = error ? `<p class="status fail">${escapeHtml(error)}</p>` : "";
   return `
 <section class="panel narrow">
   <h1>${escapeHtml(title)}</h1>
-  <p class="lede">Local session for this MVP. GitHub OAuth comes later. This form cannot change a Guardian decision.</p>
+  <p class="lede">Email and password create a server session. There is no role picker. This form cannot change a Guardian decision.</p>
+  ${errorLine}
   <form method="post" action="${escapeHtml(action)}">
-    <label>Email <input type="email" name="email" required placeholder="you@company.com"/></label>
-    <label>Role
-      <select name="role" required>
-        <option value="user">User — projects and scan results</option>
-        <option value="developer">Developer — GitHub / PR findings</option>
-        <option value="owner">Owner — Control Plane</option>
-      </select>
-    </label>
+    <label>Email <input type="email" name="email" required placeholder="you@company.com" autocomplete="username"/></label>
+    <label>Password <input type="password" name="password" required minlength="8" autocomplete="current-password"/></label>
     <button type="submit">${escapeHtml(title)}</button>
   </form>
-  <p class="meta">override=${String(ROLE_CAPABILITIES.may_override)} · decide=${String(ROLE_CAPABILITIES.may_decide)}</p>
+  <p class="meta">override=${String(IDENTITY_CAPABILITIES.may_override)} · decide=${String(IDENTITY_CAPABILITIES.may_decide)}</p>
 </section>`;
 }
 
-function renderSettings(role: Role): string {
+function renderSettings(principal: Principal | null): string {
+  if (!principal) {
+    return `<section class="panel"><h1>Settings</h1><p>Signed out.</p></section>`;
+  }
+  const rows = principal.memberships
+    .map((item) => {
+      const project = principal.projects.find((row) => row.id === item.project_id);
+      return `<tr><td>${escapeHtml(project?.name ?? item.project_id)}</td><td>${escapeHtml(item.role)}</td></tr>`;
+    })
+    .join("");
+  const table = rows
+    ? `<table><thead><tr><th>Project</th><th>Membership</th></tr></thead><tbody>${rows}</tbody></table>`
+    : `<p class="empty">No project memberships yet.</p>`;
   return `
 <section class="panel">
   <h1>Settings</h1>
-  <p>Signed in as <strong>${escapeHtml(role)}</strong>.</p>
+  <p>Signed in as <strong>${escapeHtml(principal.user.email)}</strong>.</p>
+  <p>Platform admin: <strong>${principal.user.platform_admin ? "yes" : "no"}</strong>. Membership on a project is not platform admin.</p>
   <p>Policies live in <code>architecture.yaml</code> in Git. This page cannot edit the contract.</p>
+  ${table}
   <form method="post" action="/logout"><button type="submit">Sign out</button></form>
 </section>`;
 }
 
-function renderOverview(snapshot: ControlPlaneSnapshot | null): string {
+function renderOverview(snapshot: ControlPlaneSnapshot | null, principal: Principal | null): string {
+  const projects = principal?.projects.length ?? 0;
   const latest = snapshot?.decisions[0];
-  const projects = snapshot?.repositories.length ?? 0;
   return `
 <section class="panel">
   <h1>Overview</h1>
   <p class="lede">${projects} project${projects === 1 ? "" : "s"} in this workspace.</p>
-  ${latest ? projectCard(latest, snapshot) : `<p class="empty">No scans yet. Connect a repository and open a pull request.</p>`}
+  ${latest ? projectCard(latest, snapshot) : `<p class="empty">No scans yet. Create a project and open a pull request.</p>`}
 </section>`;
 }
 
-function renderProjects(snapshot: ControlPlaneSnapshot | null): string {
-  const rows = snapshot?.repositories ?? [];
-  if (rows.length === 0) {
-    return `<section class="panel"><h1>Projects</h1><p class="empty">No projects yet.</p></section>`;
-  }
-  const cards = rows
-    .map((row) => {
-      const latest = snapshot?.decisions.find((item) => item.repository === row.id);
-      return `<a class="card" href="/app/projects/${encodeURIComponent(row.id)}">
-  <h2>${escapeHtml(row.id)}</h2>
+function renderProjects(snapshot: ControlPlaneSnapshot | null, principal: Principal | null): string {
+  const projects = principal?.projects ?? [];
+  const cards = projects
+    .map((project) => {
+      const latest = snapshot?.decisions.find((item) => item.repository === project.repository);
+      return `<a class="card" href="/app/projects/${encodeURIComponent(project.id)}">
+  <h2>${escapeHtml(project.name)}</h2>
+  <p class="meta">${escapeHtml(project.repository)}</p>
   <p>${healthLine(latest)}</p>
-  <p class="meta">${escapeHtml(row.latest_timestamp ?? "—")}</p>
+  <p class="meta">${escapeHtml(latest?.timestamp ?? "—")}</p>
 </a>`;
     })
     .join("\n");
-  return `<section class="panel"><h1>Projects</h1><div class="cards">${cards}</div></section>`;
+  const list = projects.length
+    ? `<div class="cards">${cards}</div>`
+    : `<p class="empty">No projects yet. Create one to see your Guardian results.</p>`;
+  return `<section class="panel">
+  <h1>Projects</h1>
+  ${list}
+  <form method="post" action="/app/projects" class="narrow">
+    <h2>New project</h2>
+    <label>Name <input name="name" required placeholder="API"/></label>
+    <label>Repository <input name="repository" required placeholder="owner/name"/></label>
+    <button type="submit">Create project</button>
+  </form>
+</section>`;
 }
 
-function renderProject(id: string, snapshot: ControlPlaneSnapshot | null): string {
-  const repo = snapshot?.repositories.find((item) => item.id === id);
-  const latest = snapshot?.decisions.find((item) => item.repository === id) ?? null;
-  const findings = (snapshot?.findings ?? []).filter((item) => item.repository === id);
-  if (!repo) {
+function renderProject(
+  id: string,
+  snapshot: ControlPlaneSnapshot | null,
+  principal: Principal | null,
+): string {
+  const project = findProject(id, principal);
+  if (!project) {
     return `<section class="panel"><h1>${escapeHtml(id)}</h1><p class="empty">Project not found.</p></section>`;
   }
+  const latest = snapshot?.decisions.find((item) => item.repository === project.repository) ?? null;
+  const findings = (snapshot?.findings ?? []).filter((item) => item.repository === project.repository);
   return `
 <section class="panel">
-  <h1>${escapeHtml(id)}</h1>
+  <h1>${escapeHtml(project.name)}</h1>
+  <p class="meta">${escapeHtml(project.repository)}</p>
   ${projectCard(latest, snapshot)}
   ${findings.length ? findingsList(findings) : ""}
 </section>`;
 }
 
-function renderScans(snapshot: ControlPlaneSnapshot | null, role: Role): string {
+function renderScans(snapshot: ControlPlaneSnapshot | null, principal: Principal | null): string {
   const rows = snapshot?.decisions ?? [];
-  const extra =
-    role === "developer" || role === "owner"
-      ? "<p class=\"meta\">Developer view includes commit and contract hashes from the sealed ledger.</p>"
-      : "";
+  const hashes = canSeeHashes(principal);
+  const extra = hashes
+    ? "<p class=\"meta\">Developer or owner membership includes commit and contract hashes from the sealed ledger.</p>"
+    : "";
   if (rows.length === 0) {
-    return `<section class="panel"><h1>Scans</h1><p class="empty">No scans recorded.</p></section>`;
+    return `<section class="panel"><h1>Scans</h1><p class="empty">No scans recorded for your projects.</p></section>`;
   }
   const body = rows
     .map((row) => {
-      const hashes =
-        role === "developer" || role === "owner"
-          ? `<td class="mono">${escapeHtml(row.commit_sha)}</td><td class="mono">${escapeHtml(row.contract_hash)}</td>`
-          : "";
+      const hashCells = hashes
+        ? `<td class="mono">${escapeHtml(row.commit_sha)}</td><td class="mono">${escapeHtml(row.contract_hash)}</td>`
+        : "";
       return `<tr>
   <td><a href="/app/projects/${encodeURIComponent(row.repository)}">${escapeHtml(row.repository)}</a></td>
   <td>${statusLabel(row)}</td>
   <td class="mono">${escapeHtml(row.timestamp)}</td>
-  ${hashes}
+  ${hashCells}
 </tr>`;
     })
     .join("\n");
-  const head =
-    role === "developer" || role === "owner"
-      ? "<tr><th>Project</th><th>Status</th><th>When</th><th>commit_sha</th><th>contract_hash</th></tr>"
-      : "<tr><th>Project</th><th>Status</th><th>When</th></tr>";
+  const head = hashes
+    ? "<tr><th>Project</th><th>Status</th><th>When</th><th>commit_sha</th><th>contract_hash</th></tr>"
+    : "<tr><th>Project</th><th>Status</th><th>When</th></tr>";
   return `<section class="panel"><h1>Scans</h1>${extra}<table><thead>${head}</thead><tbody>${body}</tbody></table></section>`;
 }
 
-function renderFindings(snapshot: ControlPlaneSnapshot | null, role: Role): string {
+function renderFindings(snapshot: ControlPlaneSnapshot | null, principal: Principal | null): string {
   const rows = snapshot?.findings ?? [];
   if (rows.length === 0) {
     return `<section class="panel"><h1>Findings</h1><p class="empty">No violations on the latest scans.</p></section>`;
   }
-  const prNote =
-    role === "developer" || role === "owner"
-      ? "<p class=\"meta\">Repair in a new commit. Do not edit architecture.yaml. Guardian will re-check.</p>"
-      : "";
+  const prNote = canSeeHashes(principal)
+    ? "<p class=\"meta\">Repair in a new commit. Do not edit architecture.yaml. Guardian will re-check.</p>"
+    : "";
   return `<section class="panel"><h1>Findings</h1>${prNote}${findingsList(rows)}</section>`;
 }
 
@@ -239,6 +262,13 @@ function renderActivity(snapshot: ControlPlaneSnapshot | null): string {
     )
     .join("\n");
   return `<section class="panel"><h1>Activity</h1><table><thead><tr><th>When</th><th>Project</th><th>Status</th></tr></thead><tbody>${body}</tbody></table></section>`;
+}
+
+function findProject(id: string, principal: Principal | null): Project | null {
+  if (!principal) return null;
+  return (
+    principal.projects.find((item) => item.id === id || item.repository === id) ?? null
+  );
 }
 
 function projectCard(latest: DecisionSummary | null | undefined, snapshot: ControlPlaneSnapshot | null): string {
@@ -287,11 +317,12 @@ function statusLabel(row: DecisionSummary): string {
   return row.result === "SAFE_TO_MERGE" ? "Healthy" : "Rejected";
 }
 
-function shell(title: string, role: Role, body: string): string {
-  const appNav =
-    role === "anonymous"
-      ? `<a href="/login">Sign in</a><a href="/register">Start</a>`
-      : `<a href="/app">Overview</a><a href="/app/projects">Projects</a><a href="/app/scans">Scans</a><a href="/app/findings">Findings</a><a href="/app/activity">Activity</a><a href="/settings">Settings</a>${role === "owner" ? `<a href="/admin">Admin</a>` : ""}`;
+function shell(title: string, principal: Principal | null, body: string): string {
+  const signedIn = Boolean(principal);
+  const appNav = signedIn
+    ? `<a href="/app">Overview</a><a href="/app/projects">Projects</a><a href="/app/scans">Scans</a><a href="/app/findings">Findings</a><a href="/app/activity">Activity</a><a href="/settings">Settings</a>${canAccessAdmin(principal) ? `<a href="/admin">Admin</a>` : ""}`
+    : `<a href="/login">Sign in</a><a href="/register">Start</a>`;
+  const who = principal?.user.email ?? "signed out";
   return `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -343,7 +374,7 @@ function shell(title: string, role: Role, body: string): string {
     <nav>${appNav}</nav>
   </header>
   <main>${body}</main>
-  <footer>Engine ${escapeHtml(ENGINE_VERSION)} · role ${escapeHtml(role)} · this UI cannot override Guardian · merge=${String(ROLE_CAPABILITIES.may_merge)}</footer>
+  <footer>Engine ${escapeHtml(ENGINE_VERSION)} · ${escapeHtml(who)} · this UI cannot override Guardian · merge=${String(IDENTITY_CAPABILITIES.may_merge)}</footer>
 </body>
 </html>`;
 }

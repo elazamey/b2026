@@ -44,3 +44,4 @@ export {
   createVercelHandler as createAdminVercelHandler,
 } from "./control-plane/index.js";
 export { handleSiteRequest, startSite, createVercelHandler, ROLE_CAPABILITIES } from "./web/index.js";
+export { IDENTITY_CAPABILITIES, createIdentityStore } from "./identity/index.js";

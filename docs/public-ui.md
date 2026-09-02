@@ -1,28 +1,31 @@
-# Public product UI (v0.7.1)
+# Public product UI (v0.7.2)
 
 The user product and the engineering Control Plane share one Vercel deployment. They do not share authority.
 
 ```text
 /            public marketing
-/login       local session (MVP)
-/register    local session (MVP)
-/app/*       authenticated users
+/login       email + password → server session
+/register    email + password → server session
+/app/*       authenticated users (own projects)
 /settings    account
-/admin/*     owners only — existing Control Plane
+/admin/*     platform_admin only — existing Control Plane
 ```
 
-## Roles
+## Identity vs role vs ownership
 
-| Role | Sees | Cannot |
+See [`docs/identity.md`](identity.md).
+
+| Actor | Sees | Cannot |
 | --- | --- | --- |
-| User | Projects and scan health | Admin, override, merge |
-| Developer | That, plus PR/commit hashes | Admin, override, merge |
-| Owner | `/admin` Control Plane | Change a sealed decision |
+| Signed-out | Marketing | `/app`, `/admin` |
+| User with project membership | Own project health | Other projects, `/admin`, override, merge |
+| Project owner | That project | Platform admin unless `platform_admin` |
+| `platform_admin` | `/admin` Control Plane | Change a sealed decision |
 
-Guardian stays outside every role:
+Guardian stays outside every identity:
 
 ```text
-User / Developer / Owner → Application UI → READ
+User / Developer / Owner / platform_admin → Application UI → READ
 Guardian → DECIDE
 GitHub → ENFORCE
 ```
@@ -31,7 +34,7 @@ There is no **Override** or **Approve anyway** control.
 
 ## Session
 
-v0.7.1 uses a local `guardian_role` cookie so the product shell can be designed without a paid identity provider. GitHub OAuth can replace this later. The cookie cannot rewrite `result`, `contract_hash`, or `evidence_hash`.
+v0.7.2 uses an opaque `guardian_session` cookie. The previous `guardian_role` cookie is ignored. Tampering with either cookie cannot grant Admin. The session cannot rewrite `result`, `contract_hash`, or `evidence_hash`.
 
 ## Same host, no extra server
 
@@ -39,6 +42,6 @@ v0.7.1 uses a local `guardian_role` cookie so the product shell can be designed 
 
 ```text
 /            public
-/app/*       users and developers
-/admin/*     owners — Control Plane
+/app/*       signed-in users, scoped to memberships
+/admin/*     platform_admin — Control Plane
 ```

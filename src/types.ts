@@ -1,4 +1,4 @@
-export const ENGINE_VERSION = "0.7.1";
+export const ENGINE_VERSION = "0.7.2";
 
 export const LEDGER_SCHEMA_VERSION = "0.2";
 
