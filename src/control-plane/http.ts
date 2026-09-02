@@ -11,7 +11,7 @@ export interface PlaneRequest {
 
 export interface PlaneResponse {
   status: number;
-  headers: Record<string, string>;
+  headers: Record<string, string | string[]>;
   body: string;
 }
 

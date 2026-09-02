@@ -1,6 +1,13 @@
 export type ProjectRole = "user" | "developer" | "owner";
 
 export const SESSION_COOKIE = "guardian_session";
+export const CSRF_COOKIE = "guardian_csrf";
+
+export interface BootstrapRecord {
+  email: string;
+  used_at: string;
+  user_id: string;
+}
 
 export const IDENTITY_CAPABILITIES = {
   may_decide: false,
@@ -67,6 +74,7 @@ export interface IdentityStore {
     role: ProjectRole;
   }): Promise<Membership>;
   getProject(id: string): Promise<Project | null>;
+  findProjectByRepository(repository: string): Promise<Project | null>;
 }
 
 export function publicUser(user: User): Omit<User, "password_hash"> {

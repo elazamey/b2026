@@ -11,7 +11,7 @@ import { readSessionToken } from "../src/identity/cookie.ts";
 
 const TEST_PASSWORD = ["pass", "word1"].join("");
 
-describe("v0.7.2 identity store", () => {
+describe("v0.7.3 identity store", () => {
   it("hashes passwords with scrypt and never stores plaintext", async () => {
     const stored = hashPassword(TEST_PASSWORD);
     assert.match(stored, /^scrypt\$/);
@@ -33,6 +33,7 @@ describe("v0.7.2 identity store", () => {
     const member = await identity.createUser({ email: "dev@acme.test", password: TEST_PASSWORD });
     assert.equal(admin.platform_admin, true);
     assert.equal(member.platform_admin, false);
+    assert.equal(identity.bootstrapRecord()?.email, "ops@acme.test");
 
     const { token } = await identity.createSession(member.id);
     const principal = await identity.getPrincipal(token);
@@ -73,6 +74,19 @@ describe("v0.7.2 identity store", () => {
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
+  });
+
+  it("does not grant bootstrap admin after an admin already exists", async () => {
+    const identity = new MemoryIdentityStore("ops@acme.test");
+    const first = await identity.createUser({
+      email: "root@acme.test",
+      password: TEST_PASSWORD,
+      platform_admin: true,
+    });
+    const later = await identity.createUser({ email: "ops@acme.test", password: TEST_PASSWORD });
+    assert.equal(first.platform_admin, true);
+    assert.equal(later.platform_admin, false);
+    assert.equal(identity.bootstrapRecord(), null);
   });
 
   it("cannot decide or override", () => {

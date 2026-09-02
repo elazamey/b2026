@@ -1,4 +1,4 @@
-# Public product UI (v0.7.2)
+# Public product UI (v0.7.3)
 
 The user product and the engineering Control Plane share one Vercel deployment. They do not share authority.
 
@@ -34,7 +34,7 @@ There is no **Override** or **Approve anyway** control.
 
 ## Session
 
-v0.7.2 uses an opaque `guardian_session` cookie. The previous `guardian_role` cookie is ignored. Tampering with either cookie cannot grant Admin. The session cannot rewrite `result`, `contract_hash`, or `evidence_hash`.
+v0.7.3 uses an opaque `guardian_session` cookie (HttpOnly, SameSite=Lax, Path=/, Secure on HTTPS). The previous `guardian_role` cookie is ignored. POST forms require a CSRF token. Tampering with either cookie cannot grant Admin. The session cannot rewrite `result`, `contract_hash`, or `evidence_hash`.
 
 ## Same host, no extra server
 

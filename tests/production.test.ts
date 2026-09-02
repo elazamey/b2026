@@ -53,8 +53,8 @@ class MockResponse {
   statusCode = 200;
   headers: Record<string, string> = {};
   body = "";
-  setHeader(name: string, value: string): void {
-    this.headers[name.toLowerCase()] = value;
+  setHeader(name: string, value: string | string[]): void {
+    this.headers[name.toLowerCase()] = Array.isArray(value) ? value.join("; ") : value;
   }
   end(body?: string): void {
     this.body = body ?? "";
@@ -94,7 +94,7 @@ describe("v0.7 production readiness", () => {
       encoding: "utf8",
     });
     assert.equal(version.status, 0, version.stderr);
-    assert.match(version.stdout, /0\.7\.2/);
+    assert.match(version.stdout, /0\.7\.3/);
 
     const checkRun = spawnSync(
       process.execPath,

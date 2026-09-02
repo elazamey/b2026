@@ -21,8 +21,9 @@ export function renderPublicPage(
   page: PublicPage,
   snapshot: ControlPlaneSnapshot | null,
   principal: Principal | null,
+  csrf = "",
 ): string {
-  return shell(pageTitle(page), principal, renderBody(page, snapshot, principal));
+  return shell(pageTitle(page), principal, renderBody(page, snapshot, principal, csrf));
 }
 
 function pageTitle(page: PublicPage): string {
@@ -58,20 +59,21 @@ function renderBody(
   page: PublicPage,
   snapshot: ControlPlaneSnapshot | null,
   principal: Principal | null,
+  csrf: string,
 ): string {
   switch (page.name) {
     case "home":
       return renderLanding();
     case "login":
-      return renderAuth("Sign in", "/login", page.error);
+      return renderAuth("Sign in", "/login", csrf, page.error);
     case "register":
-      return renderAuth("Create account", "/register", page.error);
+      return renderAuth("Create account", "/register", csrf, page.error);
     case "settings":
-      return renderSettings(principal);
+      return renderSettings(principal, csrf);
     case "app-overview":
       return renderOverview(snapshot, principal);
     case "app-projects":
-      return renderProjects(snapshot, principal);
+      return renderProjects(snapshot, principal, csrf);
     case "app-project":
       return renderProject(page.id, snapshot, principal);
     case "app-scans":
@@ -109,7 +111,7 @@ function renderLanding(): string {
 </section>`;
 }
 
-function renderAuth(title: string, action: string, error?: string): string {
+function renderAuth(title: string, action: string, csrf: string, error?: string): string {
   const errorLine = error ? `<p class="status fail">${escapeHtml(error)}</p>` : "";
   return `
 <section class="panel narrow">
@@ -117,6 +119,7 @@ function renderAuth(title: string, action: string, error?: string): string {
   <p class="lede">Email and password create a server session. There is no role picker. This form cannot change a Guardian decision.</p>
   ${errorLine}
   <form method="post" action="${escapeHtml(action)}">
+    ${csrfField(csrf)}
     <label>Email <input type="email" name="email" required placeholder="you@company.com" autocomplete="username"/></label>
     <label>Password <input type="password" name="password" required minlength="8" autocomplete="current-password"/></label>
     <button type="submit">${escapeHtml(title)}</button>
@@ -125,7 +128,7 @@ function renderAuth(title: string, action: string, error?: string): string {
 </section>`;
 }
 
-function renderSettings(principal: Principal | null): string {
+function renderSettings(principal: Principal | null, csrf: string): string {
   if (!principal) {
     return `<section class="panel"><h1>Settings</h1><p>Signed out.</p></section>`;
   }
@@ -145,7 +148,7 @@ function renderSettings(principal: Principal | null): string {
   <p>Platform admin: <strong>${principal.user.platform_admin ? "yes" : "no"}</strong>. Membership on a project is not platform admin.</p>
   <p>Policies live in <code>architecture.yaml</code> in Git. This page cannot edit the contract.</p>
   ${table}
-  <form method="post" action="/logout"><button type="submit">Sign out</button></form>
+  <form method="post" action="/logout">${csrfField(csrf)}<button type="submit">Sign out</button></form>
 </section>`;
 }
 
@@ -160,7 +163,7 @@ function renderOverview(snapshot: ControlPlaneSnapshot | null, principal: Princi
 </section>`;
 }
 
-function renderProjects(snapshot: ControlPlaneSnapshot | null, principal: Principal | null): string {
+function renderProjects(snapshot: ControlPlaneSnapshot | null, principal: Principal | null, csrf: string): string {
   const projects = principal?.projects ?? [];
   const cards = projects
     .map((project) => {
@@ -180,6 +183,7 @@ function renderProjects(snapshot: ControlPlaneSnapshot | null, principal: Princi
   <h1>Projects</h1>
   ${list}
   <form method="post" action="/app/projects" class="narrow">
+    ${csrfField(csrf)}
     <h2>New project</h2>
     <label>Name <input name="name" required placeholder="API"/></label>
     <label>Repository <input name="repository" required placeholder="owner/name"/></label>
@@ -377,6 +381,11 @@ function shell(title: string, principal: Principal | null, body: string): string
   <footer>Engine ${escapeHtml(ENGINE_VERSION)} · ${escapeHtml(who)} · this UI cannot override Guardian · merge=${String(IDENTITY_CAPABILITIES.may_merge)}</footer>
 </body>
 </html>`;
+}
+
+function csrfField(csrf: string): string {
+  if (!csrf) return "";
+  return `<input type="hidden" name="csrf" value="${escapeHtml(csrf)}"/>`;
 }
 
 export function escapeHtml(value: string): string {

@@ -1,4 +1,4 @@
-# Identity & authorization (v0.7.2)
+# Identity & authorization (v0.7.3)
 
 Authentication is not a role cookie. Changing a cookie cannot promote a user to platform admin.
 
@@ -18,11 +18,36 @@ Authentication  →  User identity  →  Session  →  Authorization  →  Resou
 
 Owner of Project A is not a platform administrator unless `platform_admin` is set on the user.
 
-## What the cookie is
+## Session cookie
 
-`guardian_session` is an unguessable token. The product **ignores** `guardian_role`. There is no role picker on `/login` or `/register`.
+`guardian_session` is HttpOnly, Path=/, SameSite=Lax, Max-Age=7d, and **Secure** on HTTPS (`x-forwarded-proto`). The product ignores `guardian_role`. Sessions expire and can be revoked on logout.
 
-The first platform admin is bootstrapped with `GUARDIAN_BOOTSTRAP_ADMIN_EMAIL` (env only) or a store API call. Never a form field.
+## CSRF
+
+POST `/login`, `/register`, `/logout`, and `/app/projects` require a matching `guardian_csrf` cookie and form field. A mismatching `Origin` is rejected. SameSite=Lax is not the only control.
+
+## Resource authorization
+
+```text
+authenticated user
+      ↓
+load project by id
+      ↓
+membership lookup
+      ↓
+allowed? → return resource
+otherwise → 404
+```
+
+`/admin` is `platform_admin` only. Membership is not admin. Admin is not membership.
+
+## Admin bootstrap
+
+`GUARDIAN_BOOTSTRAP_ADMIN_EMAIL` grants `platform_admin` **once**, only if no platform admin exists yet. The used bootstrap is persisted. Later registers with that email do not become admin (and the email is unique anyway). Never a form field.
+
+## Login abuse
+
+Failed and repeated sign-in/register POSTs are rate-limited per IP and per IP+email so scrypt cannot be used as a cheap CPU weapon.
 
 ## What identity cannot do
 
@@ -31,16 +56,3 @@ User / Developer / Owner / platform_admin  →  Application UI  →  READ
 Guardian  →  DECIDE
 GitHub    →  ENFORCE
 ```
-
-Identity cannot:
-
-- emit `SAFE_TO_MERGE`
-- rewrite a sealed `result`
-- edit `architecture.yaml`
-- grant `/admin` by cookie tampering
-
-`/admin` is checked server-side against `platform_admin` on the session's user.
-
-## Scope of this release
-
-A signed-in user can create a project, keep a membership, and see Guardian results for repositories they belong to. That is the product loop. GitHub OAuth and team invites come later.

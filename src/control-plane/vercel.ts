@@ -10,7 +10,7 @@ export interface VercelLikeRequest {
 
 export interface VercelLikeResponse {
   statusCode: number;
-  setHeader(name: string, value: string): void;
+  setHeader(name: string, value: string | string[]): void;
   end(body?: string): void;
 }
 

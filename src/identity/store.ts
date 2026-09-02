@@ -1,7 +1,16 @@
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { hashPassword, hashToken, newId, randomToken, verifyPassword } from "./crypto.js";
-import type { IdentityStore, Membership, Principal, Project, ProjectRole, Session, User } from "./types.js";
+import type {
+  BootstrapRecord,
+  IdentityStore,
+  Membership,
+  Principal,
+  Project,
+  ProjectRole,
+  Session,
+  User,
+} from "./types.js";
 
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 7;
 
@@ -10,6 +19,7 @@ interface IdentityDump {
   sessions: Session[];
   projects: Project[];
   memberships: Membership[];
+  bootstrap: BootstrapRecord | null;
 }
 
 export class MemoryIdentityStore implements IdentityStore {
@@ -17,6 +27,7 @@ export class MemoryIdentityStore implements IdentityStore {
   protected sessions = new Map<string, Session>();
   protected projects = new Map<string, Project>();
   protected memberships: Membership[] = [];
+  protected bootstrap: BootstrapRecord | null = null;
 
   constructor(private readonly bootstrapAdminEmail?: string) {}
 
@@ -33,17 +44,27 @@ export class MemoryIdentityStore implements IdentityStore {
     if ([...this.users.values()].some((user) => user.email === email)) {
       throw new Error("Email already registered.");
     }
-    const bootstrap = this.bootstrapAdminEmail
-      ? normalizeEmail(this.bootstrapAdminEmail) === email
-      : false;
+    const explicitAdmin = Boolean(input.platform_admin);
+    const bootstrapEligible =
+      Boolean(this.bootstrapAdminEmail) &&
+      normalizeEmail(this.bootstrapAdminEmail ?? "") === email &&
+      !this.bootstrap &&
+      !this.hasPlatformAdmin();
     const user: User = {
       id: newId("usr"),
       email,
       password_hash: hashPassword(input.password),
-      platform_admin: Boolean(input.platform_admin) || bootstrap,
+      platform_admin: explicitAdmin || bootstrapEligible,
       created_at: new Date().toISOString(),
     };
     this.users.set(user.id, user);
+    if (bootstrapEligible && user.platform_admin) {
+      this.bootstrap = {
+        email,
+        used_at: user.created_at,
+        user_id: user.id,
+      };
+    }
     this.persist();
     return user;
   }
@@ -86,9 +107,7 @@ export class MemoryIdentityStore implements IdentityStore {
     if (!user) return null;
     const memberships = this.memberships.filter((item) => item.user_id === user.id);
     const projectIds = new Set(memberships.map((item) => item.project_id));
-    const projects = [...this.projects.values()].filter(
-      (item) => user.platform_admin || projectIds.has(item.id),
-    );
+    const projects = [...this.projects.values()].filter((item) => projectIds.has(item.id));
     return { user, memberships, projects };
   }
 
@@ -151,6 +170,19 @@ export class MemoryIdentityStore implements IdentityStore {
     return this.projects.get(id) ?? null;
   }
 
+  async findProjectByRepository(repository: string): Promise<Project | null> {
+    const wanted = repository.trim();
+    return [...this.projects.values()].find((item) => item.repository === wanted) ?? null;
+  }
+
+  hasPlatformAdmin(): boolean {
+    return [...this.users.values()].some((user) => user.platform_admin);
+  }
+
+  bootstrapRecord(): BootstrapRecord | null {
+    return this.bootstrap;
+  }
+
   protected persist(): void {
     /* memory store */
   }
@@ -160,6 +192,7 @@ export class MemoryIdentityStore implements IdentityStore {
     this.sessions = new Map(dump.sessions.map((item) => [item.id, item]));
     this.projects = new Map(dump.projects.map((item) => [item.id, item]));
     this.memberships = dump.memberships;
+    this.bootstrap = dump.bootstrap ?? null;
   }
 
   dump(): IdentityDump {
@@ -168,6 +201,7 @@ export class MemoryIdentityStore implements IdentityStore {
       sessions: [...this.sessions.values()],
       projects: [...this.projects.values()],
       memberships: [...this.memberships],
+      bootstrap: this.bootstrap,
     };
   }
 }
@@ -186,6 +220,7 @@ export class FileIdentityStore extends MemoryIdentityStore {
           sessions: parsed.sessions ?? [],
           projects: parsed.projects ?? [],
           memberships: parsed.memberships ?? [],
+          bootstrap: parsed.bootstrap ?? null,
         });
       } catch {
         /* start empty */

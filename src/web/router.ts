@@ -3,56 +3,93 @@ import { handleControlPlaneRequest, type PlaneRequest, type PlaneResponse } from
 import {
   canAccessAdmin,
   canAccessApp,
+  canReadProject,
   visibleRepositories,
 } from "../identity/authorize.js";
-import { clearSessionCookie, readSessionToken, sessionCookie } from "../identity/cookie.js";
+import {
+  clearSessionCookie,
+  csrfCookie,
+  readSessionToken,
+  requestIsSecure,
+  sessionCookie,
+} from "../identity/cookie.js";
+import { csrfFromCookie, csrfMatches, newCsrfToken, originAllowed } from "../identity/csrf.js";
+import { clientIp, LoginLimiter } from "../identity/rate-limit.js";
 import { MemoryIdentityStore } from "../identity/store.js";
-import type { IdentityStore, Principal } from "../identity/types.js";
+import type { IdentityStore, Principal, Project } from "../identity/types.js";
 import { renderPublicPage, type PublicPage } from "./html.js";
 import { headerValue, parseForm } from "./roles.js";
 
 const DECISION_MUTATION_BLOCK =
   "This product UI cannot change Guardian decisions. Guardian → DECIDE. GitHub → ENFORCE.";
 
+const defaultLimiter = new LoginLimiter();
+
+export interface SiteContext {
+  limiter?: LoginLimiter;
+}
+
 export async function handleSiteRequest(
   request: PlaneRequest,
   reader: ControlPlaneReader,
   identity: IdentityStore = new MemoryIdentityStore(),
+  context: SiteContext = {},
 ): Promise<PlaneResponse> {
   const method = request.method.toUpperCase();
   const url = new URL(request.url, "http://guardian.local");
   const pathname = normalizePath(url.pathname);
-  const token = readSessionToken(headerValue(request.headers, "cookie") || null);
+  const cookieHeader = headerValue(request.headers, "cookie") || null;
+  const token = readSessionToken(cookieHeader);
   const principal = await identity.getPrincipal(token);
+  const secure = requestIsSecure(request.headers);
+  const limiter = context.limiter ?? defaultLimiter;
+  const csrf = csrfFromCookie(cookieHeader) ?? newCsrfToken();
+  const csrfHeader = csrfCookie(csrf, { secure });
 
   if (pathname === "/health") {
     return json(200, { ok: true, writable: false, product: "ai-guardian" });
   }
 
+  if (method === "POST" && !originAllowed(request.headers, url)) {
+    return text(403, "Cross-origin form rejected. Guardian decisions are unchanged.");
+  }
+
   if (pathname === "/login" || pathname === "/register") {
     const pageName = pathname === "/login" ? "login" : "register";
     if (method === "POST") {
+      const form = parseForm(request.body ?? "");
+      if (!csrfMatches(csrfFromCookie(cookieHeader), form.csrf)) {
+        return html(
+          403,
+          renderPublicPage({ name: pageName, error: "Invalid session token. Reload and try again." }, null, principal, csrf),
+          csrfHeader,
+        );
+      }
       return pageName === "login"
-        ? signIn(identity, request.body ?? "")
-        : register(identity, request.body ?? "");
+        ? signIn(identity, form, limiter, request.headers, csrf, secure)
+        : register(identity, form, limiter, request.headers, csrf, secure);
     }
     if (method !== "GET" && method !== "HEAD") {
       return text(405, DECISION_MUTATION_BLOCK, { Allow: "GET, HEAD, POST" });
     }
-    return html(200, renderPublicPage({ name: pageName }, null, principal));
+    return html(200, renderPublicPage({ name: pageName }, null, principal, csrf), csrfHeader);
   }
 
   if (pathname === "/logout") {
-    if (method !== "POST" && method !== "GET") {
-      return text(405, DECISION_MUTATION_BLOCK, { Allow: "GET, POST" });
+    if (method !== "POST") {
+      return text(405, DECISION_MUTATION_BLOCK, { Allow: "POST" });
+    }
+    const form = parseForm(request.body ?? "");
+    if (!csrfMatches(csrfFromCookie(cookieHeader), form.csrf)) {
+      return text(403, "Invalid session token. Guardian decisions are unchanged.");
     }
     if (token) await identity.revokeSession(token);
-    return redirect("/", clearSessionCookie());
+    return redirect("/", [clearSessionCookie({ secure }), csrfHeader]);
   }
 
   if (pathname === "/admin" || pathname.startsWith("/admin/")) {
     if (!canAccessAdmin(principal)) {
-      return html(403, renderPublicPage({ name: "forbidden" }, null, principal));
+      return html(403, renderPublicPage({ name: "forbidden" }, null, principal, csrf), csrfHeader);
     }
     const inner = pathname === "/admin" ? "/" : pathname.slice("/admin".length);
     return handleControlPlaneRequest(
@@ -63,41 +100,53 @@ export async function handleSiteRequest(
   }
 
   if (pathname === "/app/projects" && method === "POST") {
-    if (!canAccessApp(principal) || !principal) return redirect("/login");
-    return createProject(identity, principal, request.body ?? "");
+    if (!canAccessApp(principal) || !principal) return redirect("/login", csrfHeader);
+    const form = parseForm(request.body ?? "");
+    if (!csrfMatches(csrfFromCookie(cookieHeader), form.csrf)) {
+      return text(403, "Invalid session token. Guardian decisions are unchanged.");
+    }
+    return createProject(identity, principal, form);
   }
 
   const appPage = resolveApp(pathname);
   if (appPage) {
     if (!canAccessApp(principal) || !principal) {
-      return redirect("/login");
+      return redirect("/login", csrfHeader);
     }
     if (method !== "GET" && method !== "HEAD") {
       return text(405, DECISION_MUTATION_BLOCK, { Allow: "GET, HEAD" });
     }
+    if (appPage.name === "app-project") {
+      const project = await loadAuthorizedProject(identity, principal, appPage.id);
+      if (!project) {
+        return html(404, renderPublicPage({ name: "not-found" }, null, principal, csrf), csrfHeader);
+      }
+      const snapshot = scopedSnapshot(await reader.snapshot(), principal);
+      return html(200, renderPublicPage({ name: "app-project", id: project.id }, snapshot, principal, csrf), csrfHeader);
+    }
     const snapshot = scopedSnapshot(await reader.snapshot(), principal);
-    return html(200, renderPublicPage(appPage, snapshot, principal));
+    return html(200, renderPublicPage(appPage, snapshot, principal, csrf), csrfHeader);
   }
 
   if (pathname === "/settings") {
-    if (!canAccessApp(principal) || !principal) return redirect("/login");
+    if (!canAccessApp(principal) || !principal) return redirect("/login", csrfHeader);
     if (method !== "GET" && method !== "HEAD") {
       return text(405, DECISION_MUTATION_BLOCK, { Allow: "GET, HEAD" });
     }
-    return html(200, renderPublicPage({ name: "settings" }, null, principal));
+    return html(200, renderPublicPage({ name: "settings" }, null, principal, csrf), csrfHeader);
   }
 
   if (pathname === "/") {
     if (method !== "GET" && method !== "HEAD") {
       return text(405, DECISION_MUTATION_BLOCK, { Allow: "GET, HEAD" });
     }
-    return html(200, renderPublicPage({ name: "home" }, null, principal));
+    return html(200, renderPublicPage({ name: "home" }, null, principal, csrf), csrfHeader);
   }
 
   if (method !== "GET" && method !== "HEAD") {
     return text(405, DECISION_MUTATION_BLOCK, { Allow: "GET, HEAD" });
   }
-  return html(404, renderPublicPage({ name: "not-found" }, null, principal));
+  return html(404, renderPublicPage({ name: "not-found" }, null, principal, csrf), csrfHeader);
 }
 
 function resolveApp(pathname: string): PublicPage | null {
@@ -112,39 +161,84 @@ function resolveApp(pathname: string): PublicPage | null {
   return null;
 }
 
-async function signIn(identity: IdentityStore, body: string): Promise<PlaneResponse> {
-  const form = parseForm(body);
-  void form.role;
-  const user = await identity.authenticate(form.email ?? "", form.password ?? "");
-  if (!user) {
-    return html(401, renderPublicPage({ name: "login", error: "Invalid email or password." }, null, null));
-  }
-  const { token } = await identity.createSession(user.id);
-  return redirect("/app", sessionCookie(token));
+async function loadAuthorizedProject(
+  identity: IdentityStore,
+  principal: Principal,
+  id: string,
+): Promise<Project | null> {
+  const direct = await identity.getProject(id);
+  const project = direct ?? (await identity.findProjectByRepository(id));
+  if (!project) return null;
+  if (!canReadProject(principal, project)) return null;
+  return project;
 }
 
-async function register(identity: IdentityStore, body: string): Promise<PlaneResponse> {
-  const form = parseForm(body);
+async function signIn(
+  identity: IdentityStore,
+  form: Record<string, string>,
+  limiter: LoginLimiter,
+  headers: PlaneRequest["headers"],
+  csrf: string,
+  secure: boolean,
+): Promise<PlaneResponse> {
   void form.role;
+  const email = form.email ?? "";
+  const ip = clientIp(headers);
+  if (limiter.blocked(ip, email)) {
+    return html(
+      429,
+      renderPublicPage({ name: "login", error: "Too many sign-in attempts. Try again later." }, null, null, csrf),
+      csrfCookie(csrf, { secure }),
+    );
+  }
+  const user = await identity.authenticate(email, form.password ?? "");
+  if (!user) {
+    return html(
+      401,
+      renderPublicPage({ name: "login", error: "Invalid email or password." }, null, null, csrf),
+      csrfCookie(csrf, { secure }),
+    );
+  }
+  const { token } = await identity.createSession(user.id);
+  return redirect("/app", [sessionCookie(token, { secure }), csrfCookie(csrf, { secure })]);
+}
+
+async function register(
+  identity: IdentityStore,
+  form: Record<string, string>,
+  limiter: LoginLimiter,
+  headers: PlaneRequest["headers"],
+  csrf: string,
+  secure: boolean,
+): Promise<PlaneResponse> {
+  void form.role;
+  const email = form.email ?? "";
+  const ip = clientIp(headers);
+  if (limiter.blocked(ip, email)) {
+    return html(
+      429,
+      renderPublicPage({ name: "register", error: "Too many attempts. Try again later." }, null, null, csrf),
+      csrfCookie(csrf, { secure }),
+    );
+  }
   try {
     const user = await identity.createUser({
-      email: form.email ?? "",
+      email,
       password: form.password ?? "",
     });
     const { token } = await identity.createSession(user.id);
-    return redirect("/app", sessionCookie(token));
+    return redirect("/app", [sessionCookie(token, { secure }), csrfCookie(csrf, { secure })]);
   } catch (error) {
     const message = error instanceof Error ? error.message : "Could not create account.";
-    return html(400, renderPublicPage({ name: "register", error: message }, null, null));
+    return html(400, renderPublicPage({ name: "register", error: message }, null, null, csrf), csrfCookie(csrf, { secure }));
   }
 }
 
 async function createProject(
   identity: IdentityStore,
   principal: Principal,
-  body: string,
+  form: Record<string, string>,
 ): Promise<PlaneResponse> {
-  const form = parseForm(body);
   try {
     const project = await identity.createProject({
       name: form.name ?? "",
@@ -175,14 +269,14 @@ function normalizePath(pathname: string): string {
   return pathname || "/";
 }
 
-function html(status: number, body: string, extra: Record<string, string> = {}): PlaneResponse {
+function html(status: number, body: string, cookie?: string | string[]): PlaneResponse {
   return {
     status,
     headers: {
       "content-type": "text/html; charset=utf-8",
       "cache-control": "no-store",
       "x-guardian-writable": "false",
-      ...extra,
+      ...(cookie ? { "set-cookie": cookie } : {}),
     },
     body,
   };
@@ -213,7 +307,7 @@ function text(status: number, body: string, extra: Record<string, string> = {}):
   };
 }
 
-function redirect(location: string, cookie?: string): PlaneResponse {
+function redirect(location: string, cookie?: string | string[]): PlaneResponse {
   return {
     status: 303,
     headers: {

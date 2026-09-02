@@ -176,7 +176,7 @@ The Guardian does not record `PR #182 = PASS`. It records why.
     "head_sha": "a81f3c2..."
   },
   "contract_hash": "sha256:...",
-  "engine_version": "0.7.2",
+  "engine_version": "0.7.3",
   "timestamp": "2026-09-02T12:00:00.000Z",
   "result": "SAFE_TO_MERGE",
   "checks": {
@@ -365,7 +365,8 @@ Those come later, in this order:
 | **v0.6** | Web Control Plane (reads Turso, does not decide) |
 | **v0.7** | Free Vercel hosting for the Control Plane |
 | **v0.7.1** | Public user frontend (`/`, `/app`) + admin `/admin` |
-| **v0.7.2** | Identity & authorization (server session, Role ≠ Ownership) ← current |
+| **v0.7.2** | Identity & authorization (server session, Role ≠ Ownership) |
+| **v0.7.3** | Session/CSRF/resource authz/bootstrap-once/login rate limit ← current |
 | **v0.8** | Gemini optional reviewer (never the gate) |
 | **v0.9** | Multi-agent / provider abstraction |
 | **v1.0** | Open Core + free hosted MVP |
