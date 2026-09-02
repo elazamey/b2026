@@ -6,6 +6,7 @@ export interface PlaneRequest {
   method: string;
   url: string;
   headers?: Record<string, string | string[] | undefined>;
+  body?: string;
 }
 
 export interface PlaneResponse {
@@ -20,6 +21,7 @@ const MUTATION_BLOCK =
 export async function handleControlPlaneRequest(
   request: PlaneRequest,
   reader: ControlPlaneReader,
+  options: { basePath?: string } = {},
 ): Promise<PlaneResponse> {
   const method = request.method.toUpperCase();
   if (method !== "GET" && method !== "HEAD") {
@@ -30,6 +32,7 @@ export async function handleControlPlaneRequest(
   const pathname = normalizePath(url.pathname);
   const snapshot = await reader.snapshot();
   const wantsJson = wantsJsonResponse(request.headers, url.searchParams);
+  const basePath = options.basePath ?? "";
 
   if (pathname === "/health") {
     return json(200, {
@@ -74,9 +77,9 @@ export async function handleControlPlaneRequest(
   }
 
   if (page.name === "not-found") {
-    return html(404, renderControlPlanePage(page, snapshot));
+    return html(404, renderControlPlanePage(page, snapshot, basePath));
   }
-  const body = renderControlPlanePage(page, snapshot);
+  const body = renderControlPlanePage(page, snapshot, basePath);
   return html(200, method === "HEAD" ? "" : body);
 }
 

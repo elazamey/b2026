@@ -12,15 +12,17 @@ Arena     → REPAIR
 
 ## What you can see
 
+Mounted at **`/admin`** on the product host. `/` is the public user site.
+
 | Route | Content |
 | --- | --- |
-| `/` | Overview |
-| `/repositories` | Repositories with a recorded history |
-| `/repository/:id` | Decisions for one repository |
-| `/decisions` | Sealed decision list |
-| `/decision/:id` | `commit_sha`, `contract_hash`, `evidence_hash`, `result` |
-| `/findings` | Violations attached to decisions |
-| `/audit` | Lineage (`original_decision_id`, `repair_attempt_id`, commits) |
+| `/admin` | Overview |
+| `/admin/repositories` | Repositories with a recorded history |
+| `/admin/repository/:id` | Decisions for one repository |
+| `/admin/decisions` | Sealed decision list |
+| `/admin/decision/:id` | `commit_sha`, `contract_hash`, `evidence_hash`, `result` |
+| `/admin/findings` | Violations attached to decisions |
+| `/admin/audit` | Lineage (`original_decision_id`, `repair_attempt_id`, commits) |
 
 Add `?format=json` for machine-readable copies of the same data.
 

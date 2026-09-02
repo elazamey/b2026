@@ -6,7 +6,8 @@ import { describe, it } from "node:test";
 import { decide } from "../src/core/decision-engine.ts";
 import { validateContract } from "../src/core/contract-engine.ts";
 import { renderPrComment } from "../src/integrations/github-comment.ts";
-import { createVercelHandler, vercelRequestUrl } from "../src/control-plane/vercel.ts";
+import { vercelRequestUrl } from "../src/control-plane/vercel.ts";
+import { createVercelHandler } from "../src/web/vercel.ts";
 import { MemoryControlPlaneReader } from "../src/control-plane/reader.ts";
 import type { ControlPlaneReader } from "../src/control-plane/types.ts";
 import type { CheckResult, DecisionRecord, VerificationReport } from "../src/types.ts";
@@ -92,7 +93,7 @@ describe("v0.7 production readiness", () => {
       encoding: "utf8",
     });
     assert.equal(version.status, 0, version.stderr);
-    assert.match(version.stdout, /0\.7\.0/);
+    assert.match(version.stdout, /0\.7\.1/);
 
     const checkRun = spawnSync(
       process.execPath,
@@ -127,15 +128,29 @@ describe("v0.7 production readiness", () => {
       reader: new MemoryControlPlaneReader([record]),
     });
     const get = new MockResponse();
-    await handler({ method: "GET", url: "/decisions?format=json" }, get);
-    assert.equal(get.statusCode, 200);
+    await handler(
+      {
+        method: "GET",
+        url: "/admin/decisions?format=json",
+        headers: { cookie: "guardian_role=owner" },
+      },
+      get,
+    );
+    assert.equal(get.statusCode, 200, get.body);
     const payload = JSON.parse(get.body) as { writable: boolean; decisions: Array<{ result: string }> };
     assert.equal(payload.writable, false);
     assert.equal(payload.decisions[0]?.result, "SAFE_TO_MERGE");
 
     for (const method of ["POST", "PUT", "PATCH", "DELETE"]) {
       const res = new MockResponse();
-      await handler({ method, url: `/decision/${record.decision_id}` }, res);
+      await handler(
+        {
+          method,
+          url: `/admin/decision/${record.decision_id}`,
+          headers: { cookie: "guardian_role=owner" },
+        },
+        res,
+      );
       assert.equal(res.statusCode, 405, method);
       assert.match(res.body, /cannot change Guardian decisions/);
       assert.equal((await new MemoryControlPlaneReader([record]).getDecision(record.decision_id))?.result, "SAFE_TO_MERGE");
@@ -167,8 +182,15 @@ describe("v0.7 production readiness", () => {
         throw new Error("Turso down");
       },
     };
+    const publicHome = new MockResponse();
+    await createVercelHandler({ reader: down })({ method: "GET", url: "/" }, publicHome);
+    assert.equal(publicHome.statusCode, 200);
+
     const res = new MockResponse();
-    await createVercelHandler({ reader: down })({ method: "GET", url: "/" }, res);
+    await createVercelHandler({ reader: down })(
+      { method: "GET", url: "/app", headers: { cookie: "guardian_role=user" } },
+      res,
+    );
     assert.equal(res.statusCode, 503);
     assert.match(res.body, /Guardian decisions are unchanged/);
     assert.equal(res.headers["x-guardian-writable"], "false");

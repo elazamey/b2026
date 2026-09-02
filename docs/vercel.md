@@ -1,6 +1,6 @@
 # Free Vercel hosting (v0.7)
 
-Vercel hosts the **Control Plane** only. It does not run Guardian and it is not the merge gate.
+Vercel hosts the **public product UI** (`/`, `/app`) and the **admin Control Plane** (`/admin`). It does not run Guardian and it is not the merge gate.
 
 ```text
 Browser → Vercel → Control Plane → Turso   (read)

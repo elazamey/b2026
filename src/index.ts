@@ -41,5 +41,6 @@ export {
   createControlPlaneReader,
   handleControlPlaneRequest,
   startControlPlane,
-  createVercelHandler,
+  createVercelHandler as createAdminVercelHandler,
 } from "./control-plane/index.js";
+export { handleSiteRequest, startSite, createVercelHandler, ROLE_CAPABILITIES } from "./web/index.js";

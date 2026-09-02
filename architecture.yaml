@@ -19,11 +19,13 @@ architecture:
     - src/agents
     - src/gate
     - src/control-plane
+    - src/web
     - api/plane.ts
     - vercel.json
     - docs/github-gate.md
     - docs/control-plane.md
     - docs/vercel.md
+    - docs/public-ui.md
     - contracts/architecture.schema.yaml
     - contracts/decision-ledger.schema.yaml
     - contracts/turso.schema.sql
@@ -57,6 +59,7 @@ boundaries:
       - src/cli.ts
       - src/integrations
       - src/control-plane
+      - src/web
   scanners:
     paths:
       - src/scanners
@@ -65,9 +68,16 @@ boundaries:
       - src/integrations
       - src/ledger
       - src/control-plane
+      - src/web
   control_plane:
     paths:
       - src/control-plane
+    forbidden_imports:
+      - src/core
+      - src/web
+  web:
+    paths:
+      - src/web
     forbidden_imports:
       - src/core
   vercel_adapter:

@@ -22,10 +22,14 @@ export type ControlPlanePage =
 export function renderControlPlanePage(
   page: ControlPlanePage,
   snapshot: ControlPlaneSnapshot,
+  basePath = "",
 ): string {
   const title = pageTitle(page);
   const body = renderBody(page, snapshot);
-  return layout(title, snapshot, body);
+  const raw = layout(title, snapshot, body);
+  const base = basePath.replace(/\/$/, "");
+  if (!base) return raw;
+  return raw.replaceAll('href="/', `href="${base}/`);
 }
 
 function pageTitle(page: ControlPlanePage): string {
@@ -78,7 +82,7 @@ function renderHome(snapshot: ControlPlaneSnapshot): string {
   const latest = snapshot.decisions[0];
   return `
 <section class="hero">
-  <p class="kicker">v0.6 · read-only</p>
+  <p class="kicker">admin · read-only</p>
   <h1>Guardian Control Plane</h1>
   <p class="lede">This site displays sealed decisions. It cannot decide, merge, chat, or edit <code>architecture.yaml</code>.</p>
   <dl class="roles">
@@ -356,7 +360,7 @@ function layout(title: string, snapshot: ControlPlaneSnapshot, body: string): st
 <body>
   <div class="banner">Read only — this dashboard cannot declare SAFE_TO_MERGE, cannot merge, and cannot edit the contract</div>
   <header>
-    <a href="/"><strong>AI Guardian</strong> Control Plane</a>
+    <a href="/"><strong>AI Guardian</strong> Admin</a>
     <nav>
       <a href="/repositories">Repositories</a>
       <a href="/decisions">Decisions</a>

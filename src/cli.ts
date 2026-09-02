@@ -20,7 +20,7 @@ import { buildFindingsPack, writeFindingsPack } from "./loop/findings-pack.js";
 import { dispatchRepairTask } from "./agents/dispatch.js";
 import { detectParentCommitSha } from "./util/git.js";
 import { createControlPlaneReader } from "./control-plane/reader.js";
-import { startControlPlane } from "./control-plane/server.js";
+import { startSite } from "./web/server.js";
 
 function help(): string {
   return `
@@ -29,7 +29,7 @@ AI Architecture & Engineering Guardian
 Usage:
   ai-guardian check [path]     Verify a repository against architecture.yaml
   ai-guardian findings [path]  Print the latest machine-readable findings pack
-  ai-guardian plane [path]     Serve the read-only Control Plane
+  ai-guardian plane [path]     Serve the product UI and admin Control Plane
   ai-guardian init [path]      Write a starter architecture.yaml contract
   ai-guardian version          Print engine version
 
@@ -201,9 +201,9 @@ async function runPlane(target: string, hostFlag?: string, portFlag?: string): P
     return 2;
   }
   const reader = createControlPlaneReader({ root: target, env: process.env });
-  startControlPlane({ host, port, reader });
+  startSite({ host, port, reader });
   process.stdout.write(
-    `Control plane (read-only) http://${host}:${port}\nSource: ${reader.kind}\nDashboard cannot decide or merge.\n`,
+    `AI Guardian site http://${host}:${port}\nPublic /  App /app  Admin /admin\nSource: ${reader.kind}\nUI cannot decide or merge.\n`,
   );
   await new Promise(() => undefined);
   return 0;
