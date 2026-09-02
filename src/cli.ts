@@ -17,6 +17,7 @@ import { defaultContractYaml } from "./core/init-template.js";
 import { createDecisionStore } from "./store/create.js";
 import { applyRepairLoop } from "./loop/apply.js";
 import { buildFindingsPack, writeFindingsPack } from "./loop/findings-pack.js";
+import { dispatchRepairTask } from "./agents/dispatch.js";
 import { detectParentCommitSha } from "./util/git.js";
 
 function help(): string {
@@ -37,6 +38,8 @@ Options:
   --no-comment                 Do not post a PR comment
   --pr <number>                Pull request number (defaults to GitHub Actions event)
   --no-turso                   Do not persist to Turso even if credentials are set
+  --gate                       Publish the required GitHub check named ai-guardian
+  --no-gate                    Do not publish a GitHub Check Run
   --no-color                   Disable ANSI colors
   --help                       Show this help
 `.trim();
@@ -56,6 +59,8 @@ export async function main(argv: string[]): Promise<number> {
       "no-comment": { type: "boolean", default: false },
       pr: { type: "string" },
       "no-turso": { type: "boolean", default: false },
+      gate: { type: "boolean", default: false },
+      "no-gate": { type: "boolean", default: false },
     },
   });
 
@@ -120,12 +125,22 @@ export async function main(argv: string[]): Promise<number> {
     const saved = await store.saveDecision(report.decision);
     report.decision = saved.record;
     const findingsPath = writeFindingsPack(target, buildFindingsPack(report.decision));
+    const dispatched = await dispatchRepairTask({
+      root: target,
+      decision: report.decision,
+    });
 
     if (!values.json) {
       const indexPath = resolve(defaultLedgerDir(target), "index.json");
       process.stdout.write(`Ledger: ${defaultLedgerPath(target, report.decision)}\n`);
       process.stdout.write(`Ledger index: ${indexPath}\n`);
       process.stdout.write(`Findings: ${findingsPath}\n`);
+      if (dispatched.task) {
+        const written = dispatched.results.find((item) => item.written)?.written;
+        process.stdout.write(
+          `Repair task: ${written ?? dispatched.task.decision_id} (${dispatched.results.map((item) => item.provider).join(", ")})\n`,
+        );
+      }
       if (saved.storage.turso === "persisted" || saved.storage.turso === "exists") {
         process.stdout.write(`Turso: ${saved.storage.turso} (${report.decision.decision_id})\n`);
       }
@@ -135,10 +150,12 @@ export async function main(argv: string[]): Promise<number> {
     const shouldComment =
       !values["no-comment"] &&
       (values.comment || Boolean(context?.inActions && context.pullRequest));
+    const shouldGate =
+      !values["no-gate"] && (values.gate || Boolean(context?.inActions));
 
-    await emitGithub(report, { comment: shouldComment, context });
+    await emitGithub(report, { comment: shouldComment, gate: shouldGate, context });
 
-    if (report.decision.github?.comment_id) {
+    if (report.decision.github?.comment_id || report.decision.github?.check_id) {
       await store.saveDecision(report.decision);
     }
 

@@ -8,10 +8,11 @@ on:
 permissions:
   contents: read
   pull-requests: write
+  checks: write
 
 jobs:
-  verify:
-    name: Deterministic verification
+  ci:
+    name: ci
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -23,16 +24,33 @@ jobs:
       - run: npm test
       - run: npm run typecheck
       - run: npm run build
-      - name: ai-guardian check
+
+  ai-guardian:
+    name: ai-guardian
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - name: Required merge gate
         env:
           GITHUB_TOKEN: ${{ github.token }}
           TURSO_DATABASE_URL: ${{ secrets.TURSO_DATABASE_URL }}
           TURSO_AUTH_TOKEN: ${{ secrets.TURSO_AUTH_TOKEN }}
-        run: node dist/cli.js check --no-color
+        run: node dist/cli.js check --no-color --gate
       - name: Upload decision ledger
         if: always()
         uses: actions/upload-artifact@v4
         with:
           name: decision-ledger
-          path: .guardian/decisions/
+          path: |
+            .guardian/decisions/
+            .guardian/findings/
+            .guardian/repair-task.json
           if-no-files-found: ignore

@@ -30,10 +30,24 @@ export class GithubApiError extends Error {
   }
 }
 
+export interface GithubCheckRun {
+  id: number;
+  html_url: string;
+  name: string;
+  conclusion: string;
+}
+
 export interface GithubClient {
   listIssueComments(issue: number): Promise<GithubComment[]>;
   createIssueComment(issue: number, body: string): Promise<GithubComment>;
   updateComment(commentId: number, body: string): Promise<GithubComment>;
+  createCheckRun(input: {
+    name: string;
+    head_sha: string;
+    conclusion: "success" | "failure";
+    title: string;
+    summary: string;
+  }): Promise<GithubCheckRun>;
 }
 
 export function createGithubClient(options: {
@@ -89,6 +103,22 @@ export function createGithubClient(options: {
       });
       return asComment(data);
     },
+    async createCheckRun(input): Promise<GithubCheckRun> {
+      const data = await request(`/check-runs`, {
+        method: "POST",
+        body: JSON.stringify({
+          name: input.name,
+          head_sha: input.head_sha,
+          status: "completed",
+          conclusion: input.conclusion,
+          output: {
+            title: input.title,
+            summary: input.summary.slice(0, 65535),
+          },
+        }),
+      });
+      return asCheckRun(data);
+    },
   };
 }
 
@@ -118,5 +148,20 @@ function asComment(data: unknown): GithubComment {
     id: Number(record.id ?? 0),
     body: String(record.body ?? ""),
     html_url: String(record.html_url ?? ""),
+  };
+}
+
+function asCheckRun(data: unknown): GithubCheckRun {
+  const record = (data ?? {}) as {
+    id?: number;
+    html_url?: string;
+    name?: string;
+    conclusion?: string;
+  };
+  return {
+    id: Number(record.id ?? 0),
+    html_url: String(record.html_url ?? ""),
+    name: String(record.name ?? ""),
+    conclusion: String(record.conclusion ?? ""),
   };
 }

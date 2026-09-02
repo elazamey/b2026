@@ -68,8 +68,13 @@ runs:
         if [ "${{ inputs.comment }}" = "false" ]; then
           COMMENT_FLAG="--no-comment"
         fi
+        GATE_FLAG="--gate"
+        if [ "${{ inputs.gate }}" = "false" ]; then
+          GATE_FLAG="--no-gate"
+        fi
         node "${{ github.action_path }}/dist/cli.js" check "${{ inputs.path }}" \
           --contract "${{ inputs.contract }}" \
           --no-color \
           $JSON_FLAG \
-          $COMMENT_FLAG
+          $COMMENT_FLAG \
+          $GATE_FLAG

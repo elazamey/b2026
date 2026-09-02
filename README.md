@@ -16,13 +16,13 @@ Turso           → records decisions (v0.3+)
 Google APIs     → isolated external integrations
 ```
 
-v0.4 adds the Arena repair loop **around** the Guardian, not inside it:
+Free-first 2026: no VPS, no paid worker, no LLM in the core.
 
 ```text
 Git            = source of truth (architecture.yaml)
 Guardian       = decision authority (SAFE TO MERGE / REJECTED)
-GitHub         = event bus (check + sticky comment + findings pack)
-Arena Agent    = executor only — never the merge authority
+GitHub         = event bus + required merge gate (`ai-guardian`)
+Agent adapter  = Arena / manual / future — never merge authority
 Turso          = optional remote state/evidence store
 ```
 
@@ -176,7 +176,7 @@ The Guardian does not record `PR #182 = PASS`. It records why.
     "head_sha": "a81f3c2..."
   },
   "contract_hash": "sha256:...",
-  "engine_version": "0.4.0",
+  "engine_version": "0.5.0",
   "timestamp": "2026-09-02T12:00:00.000Z",
   "result": "SAFE_TO_MERGE",
   "checks": {
@@ -225,15 +225,21 @@ on: [pull_request]
 permissions:
   contents: read
   pull-requests: write
+  checks: write
 jobs:
-  verify:
+  ai-guardian:
+    name: ai-guardian
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
       - uses: elazamey/b2026@main
 ```
 
-The Action fails the check on `REJECTED`, writes GitHub annotations, posts/updates the PR comment, and exposes `decision`, `violations`, `decision_id`, `contract_hash`, `evidence_hash`, and `pull_request` as outputs.
+The Action fails the job on `REJECTED`, writes GitHub annotations, posts/updates the PR comment, publishes the required check **`ai-guardian`**, and exposes `decision`, `violations`, `decision_id`, `contract_hash`, `evidence_hash`, and `pull_request` as outputs.
+
+Require that check on `main`: see [`docs/github-gate.md`](docs/github-gate.md). On a **public** repository, standard GitHub-hosted runners are free.
 
 Optional Turso persistence uses `TURSO_DATABASE_URL` and `TURSO_AUTH_TOKEN`. They are never required. An unavailable database does not flip `SAFE_TO_MERGE` into `REJECTED`.
 
@@ -277,11 +283,12 @@ Schema: [`contracts/turso.schema.sql`](contracts/turso.schema.sql)
 
 ## Repair loop (v0.4)
 
-Guardian does **not** call Arena. GitHub carries the event:
+Guardian does **not** call Arena. Arena is an optional **Agent Provider**. GitHub carries the event:
 
 ```text
-PR → Guardian check → REJECTED → sticky comment + findings pack
-  → Agent reads findings → new commit → push
+PR → Guardian check → REJECTED → sticky comment + findings pack + repair-task
+  → Adapter (Arena | Manual | Future)
+  → new commit → push
   → GitHub → Guardian again
 ```
 
@@ -292,13 +299,24 @@ npx tsx src/cli.ts findings --json
 
 A repair that changes `architecture.yaml` is rejected with `CTR-001` even if every other check would pass.
 
-## What v0.4 does not do
+## Required GitHub gate (v0.5)
 
-- No dashboard
-- No LLM merge decision
-- No Arena → Vercel production path
+`SAFE_TO_MERGE` is the conclusion of the required check named `ai-guardian`.
+
+| Decision | Check `ai-guardian` |
+| --- | --- |
+| `SAFE_TO_MERGE` | success |
+| `REJECTED` | failure |
+
+Gemini, Arena, and a human reviewer cannot flip that conclusion. Setup: [`docs/github-gate.md`](docs/github-gate.md).
+
+## What this release does not do
+
+- No dashboard / Control Plane (v0.6)
+- No Vercel deploy (v0.7)
+- No Gemini merge decision (v0.8, optional explanation only)
 - No Turso as source of truth for the contract
-- No Google credentials in Git, the contract, or prompts
+- No always-on VPS
 
 Those come later, in this order:
 
@@ -307,9 +325,13 @@ Those come later, in this order:
 | **v0.1** | CLI + GitHub Action |
 | **v0.2** | PR comments + Decision Ledger |
 | **v0.3** | Turso state ledger (optional, recorded state only) |
-| **v0.4** | Arena Agent feedback / repair loop ← current |
-| **v0.5** | Vercel deployment gate |
-| **v1.0** | Hosted dashboard + SaaS |
+| **v0.4** | Agent Adapter + repair loop + audit trail |
+| **v0.5** | Required GitHub gate (`ai-guardian`) ← current |
+| **v0.6** | Web Control Plane (reads Turso, does not decide) |
+| **v0.7** | Free Vercel hosting for the Control Plane |
+| **v0.8** | Gemini optional reviewer (never the gate) |
+| **v0.9** | Multi-agent / provider abstraction |
+| **v1.0** | Open Core + free hosted MVP |
 
 ## Layout
 

@@ -9,9 +9,11 @@ import {
 } from "./github-api.js";
 import { renderPrComment } from "./github-comment.js";
 import { type GithubContext } from "./github-context.js";
+import { GATE_CHECK_NAME, gateConclusion, renderGateOutput } from "../gate/check-run.js";
 
 export interface EmitGithubOptions {
   comment: boolean;
+  gate: boolean;
   context: GithubContext | null;
   fetch?: FetchLike;
   onWarning?: (message: string) => void;
@@ -72,8 +74,69 @@ export async function emitGithub(
     writeGithubOutput(report);
   }
 
+  if (options.gate) {
+    await postGateCheck(report, options);
+  }
+
   if (!options.comment) return;
   await postPrComment(report, options);
+}
+
+async function postGateCheck(
+  report: VerificationReport,
+  options: EmitGithubOptions,
+): Promise<void> {
+  const warn = options.onWarning ?? ((message: string) => process.stderr.write(`${message}\n`));
+  const context = options.context;
+  if (!context) {
+    warn("Guardian gate skipped: no GitHub context.");
+    return;
+  }
+  if (!context.token) {
+    warn("Guardian gate skipped: GITHUB_TOKEN is not set.");
+    return;
+  }
+  if (!context.owner || !context.repo) {
+    warn("Guardian gate skipped: GITHUB_REPOSITORY is not set.");
+    return;
+  }
+  const headSha =
+    context.pullRequest?.head_sha || context.sha || report.decision.commit_sha || "";
+  if (!headSha) {
+    warn("Guardian gate skipped: no commit SHA.");
+    return;
+  }
+
+  try {
+    const client = createGithubClient({
+      token: context.token,
+      owner: context.owner,
+      repo: context.repo,
+      apiUrl: context.apiUrl,
+      fetch: options.fetch,
+    });
+    const output = renderGateOutput(report);
+    const check = await client.createCheckRun({
+      name: GATE_CHECK_NAME,
+      head_sha: headSha,
+      conclusion: gateConclusion(report.decision.result),
+      title: output.title,
+      summary: output.summary,
+    });
+    report.decision.github = {
+      ...(report.decision.github ?? {}),
+      check_id: check.id,
+      check_url: check.html_url,
+      check_name: GATE_CHECK_NAME,
+    };
+    process.stdout.write(
+      `Gate ${GATE_CHECK_NAME}: ${check.conclusion || gateConclusion(report.decision.result)} ${check.html_url}\n`,
+    );
+  } catch (error) {
+    warn(
+      `Guardian gate check-run failed: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
 }
 
 async function postPrComment(
@@ -140,6 +203,8 @@ function writeGithubOutput(report: VerificationReport): void {
       `contract_hash=${report.contract_hash}`,
       `evidence_hash=${report.decision.evidence_hash}`,
       `pull_request=${pr}`,
+      `gate=${GATE_CHECK_NAME}`,
+      `gate_conclusion=${gateConclusion(report.decision.result)}`,
       "",
     ].join("\n"),
   );

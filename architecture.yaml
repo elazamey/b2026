@@ -16,6 +16,9 @@ architecture:
     - src/integrations
     - src/store
     - src/loop
+    - src/agents
+    - src/gate
+    - docs/github-gate.md
     - contracts/architecture.schema.yaml
     - contracts/decision-ledger.schema.yaml
     - contracts/turso.schema.sql

@@ -1,4 +1,4 @@
-export const ENGINE_VERSION = "0.4.0";
+export const ENGINE_VERSION = "0.5.0";
 
 export const LEDGER_SCHEMA_VERSION = "0.2";
 
@@ -110,6 +110,9 @@ export interface GithubProvenance {
   run_url?: string;
   comment_id?: number;
   comment_url?: string;
+  check_id?: number;
+  check_url?: string;
+  check_name?: string;
 }
 
 export interface DecisionStorageState {
