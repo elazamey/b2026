@@ -63,6 +63,7 @@ export function renderPrComment(report: VerificationReport): string {
     lines.push("- Do **not** edit `architecture.yaml` to bypass a finding.");
     lines.push("- Do **not** declare `SAFE_TO_MERGE`.");
     lines.push("- Do **not** merge. Guardian is the only merge authority.");
+    lines.push("- Stay within 50 files, 500 diff lines, 32k tokens, and 900 seconds.");
     if (status === "exhausted") {
       lines.push(
         `- Repair budget exhausted (${attempt}/${MAX_REPAIR_ATTEMPTS}). Human review. The agent cannot grant passage.`,

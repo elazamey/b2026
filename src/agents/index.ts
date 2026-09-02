@@ -1,4 +1,10 @@
-export { REPAIR_CONSTRAINTS, REPAIR_TASK_SCHEMA, MAX_REPAIR_ATTEMPTS, assertRepairTaskSafe } from "./types.js";
+export {
+  REPAIR_CONSTRAINTS,
+  REPAIR_TASK_SCHEMA,
+  MAX_REPAIR_ATTEMPTS,
+  REPAIR_BUDGET,
+  assertRepairTaskSafe,
+} from "./types.js";
 export type {
   AgentAdapter,
   AgentProvider,

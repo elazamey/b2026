@@ -21,6 +21,10 @@ The agent may repair violations more than once. It cannot grant itself passage.
 
 ```text
 max_attempts: 3
+max_runtime_seconds: 900
+max_diff_lines: 500
+max_files_changed: 50
+max_tokens_per_cycle: 32000
 may_modify_contract: false
 may_declare_safe_to_merge: false
 may_merge: false
@@ -54,6 +58,10 @@ The agent does not receive the full Guardian report as its work order. The task 
     "may_merge": false,
     "must_create_new_commit": true,
     "max_attempts": 3,
+    "max_runtime_seconds": 900,
+    "max_diff_lines": 500,
+    "max_files_changed": 50,
+    "max_tokens_per_cycle": 32000,
     "merge_authority": "guardian"
   }
 }
@@ -78,6 +86,34 @@ resulting_decision_id
 
 After three rejected attempts the loop stops. Human review. The agent still cannot merge.
 
+## Budget, timeout, abuse controls (v0.9.1)
+
+The loop records **why a cycle ended**. That status is not the Guardian decision.
+
+```text
+RUNNING
+TIMEOUT
+BUDGET_EXCEEDED
+PROVIDER_ERROR
+PATCH_REJECTED
+RECHECK_FAILED
+COMPLETED
+```
+
+```text
+Agent failure ≠ Guardian rejection
+Guardian rejection ≠ infrastructure failure
+```
+
+| Cycle status | Class | Guardian `result` |
+| --- | --- | --- |
+| `TIMEOUT` / `BUDGET_EXCEEDED` / `PATCH_REJECTED` | agent | unchanged |
+| `PROVIDER_ERROR` | infrastructure | unchanged |
+| `RECHECK_FAILED` | guardian | `REJECTED` |
+| `COMPLETED` | guardian | `SAFE_TO_MERGE` |
+
+Timeout, oversized diffs, and provider errors stop further dispatch. They do not convert a decision to `REJECTED` or `SAFE_TO_MERGE`.
+
 ## What this is not
 
 - Not an independent agent system
@@ -85,4 +121,4 @@ After three rejected attempts the loop stops. Human review. The agent still cann
 - Not a Core rewrite
 - Not Gemini deciding `SAFE_TO_MERGE`
 
-Next: v0.9.1 budget/timeout, v0.9.2 evidence, then v1.0 free MVP.
+Next: v0.9.2 evidence, then v1.0 free MVP.

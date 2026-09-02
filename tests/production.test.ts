@@ -94,7 +94,7 @@ describe("v0.7 production readiness", () => {
       encoding: "utf8",
     });
     assert.equal(version.status, 0, version.stderr);
-    assert.match(version.stdout, /0\.9\.0/);
+    assert.match(version.stdout, /0\.9\.1/);
 
     const checkRun = spawnSync(
       process.execPath,

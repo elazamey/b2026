@@ -1,10 +1,10 @@
-import { MAX_REPAIR_ATTEMPTS } from "../loop/orchestrate.js";
+import { MAX_REPAIR_ATTEMPTS, REPAIR_BUDGET } from "../loop/budget.js";
 
 export type AgentProvider = "arena" | "manual" | "future";
 
 export const REPAIR_TASK_SCHEMA = "guardian.repair-task/v2";
 
-export { MAX_REPAIR_ATTEMPTS };
+export { MAX_REPAIR_ATTEMPTS, REPAIR_BUDGET };
 
 export interface RepairConstraints {
   may_declare_safe_to_merge: boolean;
@@ -12,6 +12,10 @@ export interface RepairConstraints {
   may_merge: boolean;
   must_create_new_commit: boolean;
   max_attempts: number;
+  max_runtime_seconds: number;
+  max_diff_lines: number;
+  max_files_changed: number;
+  max_tokens_per_cycle: number;
   merge_authority: "guardian";
 }
 
@@ -20,7 +24,11 @@ export const REPAIR_CONSTRAINTS: RepairConstraints = {
   may_modify_contract: false,
   may_merge: false,
   must_create_new_commit: true,
-  max_attempts: MAX_REPAIR_ATTEMPTS,
+  max_attempts: REPAIR_BUDGET.max_attempts,
+  max_runtime_seconds: REPAIR_BUDGET.max_runtime_seconds,
+  max_diff_lines: REPAIR_BUDGET.max_diff_lines,
+  max_files_changed: REPAIR_BUDGET.max_files_changed,
+  max_tokens_per_cycle: REPAIR_BUDGET.max_tokens_per_cycle,
   merge_authority: "guardian",
 };
 
@@ -72,7 +80,19 @@ export function assertRepairTaskSafe(task: RepairTask): void {
   if (task.constraints.merge_authority !== "guardian") {
     throw new Error("Adapter cannot accept merge authority.");
   }
-  if (task.constraints.max_attempts !== MAX_REPAIR_ATTEMPTS) {
+  if (task.constraints.max_attempts !== REPAIR_BUDGET.max_attempts) {
     throw new Error("Adapter cannot accept a raised repair budget.");
+  }
+  if (task.constraints.max_runtime_seconds !== REPAIR_BUDGET.max_runtime_seconds) {
+    throw new Error("Adapter cannot accept a raised repair timeout.");
+  }
+  if (task.constraints.max_diff_lines !== REPAIR_BUDGET.max_diff_lines) {
+    throw new Error("Adapter cannot accept a raised diff budget.");
+  }
+  if (task.constraints.max_files_changed !== REPAIR_BUDGET.max_files_changed) {
+    throw new Error("Adapter cannot accept a raised file budget.");
+  }
+  if (task.constraints.max_tokens_per_cycle !== REPAIR_BUDGET.max_tokens_per_cycle) {
+    throw new Error("Adapter cannot accept a raised token budget.");
   }
 }

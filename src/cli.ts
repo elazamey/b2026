@@ -17,11 +17,7 @@ import { defaultContractYaml } from "./core/init-template.js";
 import { createDecisionStore } from "./store/create.js";
 import { applyRepairLoop } from "./loop/apply.js";
 import { buildFindingsPack, writeFindingsPack } from "./loop/findings-pack.js";
-import {
-  buildRepairCycle,
-  readLastRepairProvider,
-  writeRepairCycle,
-} from "./loop/cycles.js";
+import { closeRepairCycle } from "./loop/cycles.js";
 import { MAX_REPAIR_ATTEMPTS } from "./loop/orchestrate.js";
 import { dispatchRepairTask } from "./agents/dispatch.js";
 import { detectParentCommitSha } from "./util/git.js";
@@ -146,7 +142,7 @@ export async function main(argv: string[]): Promise<number> {
     const saved = await store.saveDecision(report.decision);
     report.decision = saved.record;
     const findingsPath = writeFindingsPack(target, buildFindingsPack(report.decision));
-    const cyclePath = persistRepairCycle(target, previous, report.decision);
+    const cycle = persistRepairCycle(target, previous, report.decision);
     const review = await maybeAdvisoryReview(target, report.decision, Boolean(values["no-gemini"]));
     const repairPlan = review && !isReviewSkip(review) ? review.repair_plan : [];
     const dispatched = await dispatchRepairTask({
@@ -160,13 +156,24 @@ export async function main(argv: string[]): Promise<number> {
       process.stdout.write(`Ledger: ${defaultLedgerPath(target, report.decision)}\n`);
       process.stdout.write(`Ledger index: ${indexPath}\n`);
       process.stdout.write(`Findings: ${findingsPath}\n`);
-      if (cyclePath) {
-        process.stdout.write(`Repair cycle: ${cyclePath}\n`);
+      if (cycle) {
+        process.stdout.write(
+          `Repair cycle: ${cycle.cycle_id} ${cycle.status} (class=${cycle.failure_class ?? "none"})\n`,
+        );
       }
       if (dispatched.stopped === "exhausted") {
         process.stdout.write(
           `Repair budget exhausted (${MAX_REPAIR_ATTEMPTS}/${MAX_REPAIR_ATTEMPTS}). Human review. Agent cannot grant passage.\n`,
         );
+      }
+      if (dispatched.stopped === "timeout") {
+        process.stdout.write("Repair timed out. Human review. Guardian decision is unchanged.\n");
+      }
+      if (dispatched.stopped === "budget") {
+        process.stdout.write("Repair resource budget exceeded. Human review. Guardian decision is unchanged.\n");
+      }
+      if (dispatched.stopped === "provider") {
+        process.stdout.write("Repair provider error. Guardian decision is unchanged.\n");
       }
       if (dispatched.task) {
         const written = dispatched.results.find((item) => item.written)?.written;
@@ -213,15 +220,9 @@ function persistRepairCycle(
   root: string,
   previous: DecisionRecord | null,
   current: DecisionRecord,
-): string | undefined {
+) {
   if (!previous || !current.lineage) return undefined;
-  const cycle = buildRepairCycle({
-    previous,
-    current,
-    repairProvider: readLastRepairProvider(root, current.lineage.parent_decision_id),
-  });
-  if (!cycle) return undefined;
-  return writeRepairCycle(root, cycle);
+  return closeRepairCycle(root, previous, current);
 }
 
 async function maybeAdvisoryReview(root: string, decision: DecisionRecord, disabled: boolean) {

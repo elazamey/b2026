@@ -37,8 +37,10 @@ export {
   applyRepairLoop,
   buildFindingsPack,
   MAX_REPAIR_ATTEMPTS,
+  REPAIR_BUDGET,
   shouldDispatchRepair,
   buildRepairCycle,
+  classifyCycle,
 } from "./loop/index.js";
 export { dispatchRepairTask, buildRepairTask, ArenaAdapter, ManualAdapter } from "./agents/index.js";
 export { GATE_CHECK_NAME, gateConclusion } from "./gate/check-run.js";

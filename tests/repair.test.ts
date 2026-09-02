@@ -6,7 +6,10 @@ import { after, describe, it } from "node:test";
 import { decide } from "../src/core/decision-engine.ts";
 import { validateContract } from "../src/core/contract-engine.ts";
 import { applyRepairLoop } from "../src/loop/apply.ts";
-import { buildRepairCycle, writeRepairCycle } from "../src/loop/cycles.ts";
+import { buildRepairCycle, readLatestCycle, writeRepairCycle } from "../src/loop/cycles.ts";
+import { classifyCycle } from "../src/loop/classify.ts";
+import { parseNumstat } from "../src/loop/diff.ts";
+import { REPAIR_BUDGET } from "../src/loop/budget.ts";
 import {
   MAX_REPAIR_ATTEMPTS,
   orchestrationStatus,
@@ -55,7 +58,7 @@ const contract = validateContract({
   merge: { require: ["architecture", "security"] },
 });
 
-function report(input: { sha: string; fail?: boolean }): VerificationReport {
+function report(input: { sha: string; fail?: boolean; contractHash?: string }): VerificationReport {
   const checks = [
     check("architecture", "PASS"),
     check("dependencies", "PASS"),
@@ -83,7 +86,7 @@ function report(input: { sha: string; fail?: boolean }): VerificationReport {
     repository: "owner/repo",
     commit: input.sha.slice(0, 7),
     commitSha: input.sha,
-    contractHash: "sha256:locked",
+    contractHash: input.contractHash ?? "sha256:locked",
     contractPath: "architecture.yaml",
   });
   return {
@@ -109,6 +112,11 @@ describe("v0.9 Controlled Repair Orchestration", () => {
     assert.equal(REPAIR_CONSTRAINTS.may_modify_contract, false);
     assert.equal(REPAIR_CONSTRAINTS.may_declare_safe_to_merge, false);
     assert.equal(REPAIR_CONSTRAINTS.merge_authority, "guardian");
+    assert.equal(REPAIR_CONSTRAINTS.max_runtime_seconds, 900);
+    assert.equal(REPAIR_CONSTRAINTS.max_diff_lines, 500);
+    assert.equal(REPAIR_CONSTRAINTS.max_files_changed, 50);
+    assert.equal(REPAIR_CONSTRAINTS.max_tokens_per_cycle, 32_000);
+    assert.equal(REPAIR_BUDGET.max_attempts, 3);
   });
 
   it("hands the agent a verifiable task, not the full report", () => {
@@ -194,11 +202,13 @@ describe("v0.9 Controlled Repair Orchestration", () => {
     assert.equal(first.source_commit, "c1cycle");
     assert.equal(first.resulting_commit, "c2cycle");
     assert.equal(first.resulting_decision_id, d2.decision_id);
-    assert.equal(first.status, "rejected");
+    assert.equal(first.status, "RECHECK_FAILED");
+    assert.equal(first.failure_class, "guardian");
     assert.equal(second.parent_decision_id, d2.decision_id);
     assert.equal(second.resulting_decision_id, d3.decision_id);
     assert.notEqual(first.resulting_decision_id, second.resulting_decision_id);
-    assert.equal(second.status, "passed");
+    assert.equal(second.status, "COMPLETED");
+    assert.equal(second.failure_class, "guardian");
     assert.equal(d3.result, "SAFE_TO_MERGE");
     assert.equal(d1.result, "REJECTED");
 
@@ -244,5 +254,129 @@ describe("v0.9 Controlled Repair Orchestration", () => {
         assert.doesNotMatch(source, /src\/gemini/);
       }
     }
+  });
+});
+
+describe("v0.9.1 budget timeout and abuse controls", () => {
+  it("keeps timeout as an agent failure, not a Guardian rejection", () => {
+    const d1 = report({ sha: "t1deadbeef", fail: true }).decision;
+    const d2 = applyRepairLoop(report({ sha: "t2deadbeef", fail: true }), {
+      previous: d1,
+      parentCommitSha: "t1deadbeef",
+    }).decision;
+    const cycle = buildRepairCycle({
+      previous: d1,
+      current: d2,
+      usage: { runtime_seconds: 901, files_changed: 1, diff_lines: 4, tokens: null },
+    });
+    assert.ok(cycle);
+    assert.equal(d2.result, "REJECTED");
+    assert.equal(cycle.status, "TIMEOUT");
+    assert.equal(cycle.failure_class, "agent");
+    assert.equal(cycle.resulting_result, "REJECTED");
+    assert.notEqual(cycle.status, "RECHECK_FAILED");
+  });
+
+  it("keeps an oversized patch as BUDGET_EXCEEDED without flipping result", async () => {
+    const root = mkdtempSync(join(tmpdir(), "guardian-budget-"));
+    dirs.push(root);
+    const d1 = report({ sha: "b1deadbeef", fail: true }).decision;
+    const d2 = applyRepairLoop(report({ sha: "b2deadbeef", fail: true }), {
+      previous: d1,
+      parentCommitSha: "b1deadbeef",
+    }).decision;
+    const cycle = buildRepairCycle({
+      previous: d1,
+      current: d2,
+      usage: { runtime_seconds: 12, files_changed: 51, diff_lines: 10, tokens: null },
+    });
+    assert.ok(cycle);
+    writeRepairCycle(root, cycle);
+    assert.equal(d2.result, "REJECTED");
+    assert.equal(cycle.status, "BUDGET_EXCEEDED");
+    assert.equal(cycle.failure_class, "agent");
+    const dispatched = await dispatchRepairTask({ root, decision: d2 });
+    assert.equal(dispatched.task, null);
+    assert.equal(dispatched.stopped, "budget");
+    assert.equal(d2.result, "REJECTED");
+  });
+
+  it("keeps provider error as infrastructure, not Guardian rejection", async () => {
+    const root = mkdtempSync(join(tmpdir(), "guardian-provider-"));
+    dirs.push(root);
+    const rejected = report({ sha: "p1deadbeef", fail: true }).decision;
+    const original = rejected.result;
+    const dispatched = await dispatchRepairTask({
+      root,
+      decision: rejected,
+      providers: ["future"],
+    });
+    assert.equal(dispatched.stopped, "provider");
+    assert.equal(rejected.result, original);
+    assert.equal(rejected.result, "REJECTED");
+    const latest = readLatestCycle(root);
+    assert.equal(latest?.status, "PROVIDER_ERROR");
+    assert.equal(latest?.failure_class, "infrastructure");
+    assert.equal(latest?.resulting_result, null);
+  });
+
+  it("classifies contract mutation as PATCH_REJECTED", () => {
+    const d1 = report({ sha: "m1deadbeef", fail: true }).decision;
+    const bypass = applyRepairLoop(
+      report({ sha: "m2deadbeef", fail: false, contractHash: "sha256:weakened" }),
+      { previous: d1, parentCommitSha: "m1deadbeef" },
+    ).decision;
+    const cycle = buildRepairCycle({ previous: d1, current: bypass, repairProvider: "arena" });
+    assert.ok(cycle);
+    assert.equal(bypass.result, "REJECTED");
+    assert.equal(cycle.status, "PATCH_REJECTED");
+    assert.equal(cycle.failure_class, "agent");
+    assert.equal(cycle.resulting_result, "REJECTED");
+  });
+
+  it("does not confuse Guardian rejection with infrastructure failure", () => {
+    assert.equal(
+      classifyCycle({
+        guardianResult: "REJECTED",
+        usage: { runtime_seconds: 1, files_changed: 1, diff_lines: 1, tokens: null },
+      }),
+      "RECHECK_FAILED",
+    );
+    assert.equal(classifyCycle({ guardianResult: "SAFE_TO_MERGE", providerError: true }), "PROVIDER_ERROR");
+    assert.equal(
+      classifyCycle({
+        guardianResult: "SAFE_TO_MERGE",
+        usage: { runtime_seconds: 1, files_changed: 1, diff_lines: 501, tokens: null },
+      }),
+      "BUDGET_EXCEEDED",
+    );
+  });
+
+  it("parses git numstat into files and diff lines", () => {
+    assert.deepEqual(parseNumstat("10\t2\tsrc/a.ts\n3\t1\tsrc/b.ts\n-\t-\tbin.dat\n"), {
+      files_changed: 3,
+      diff_lines: 16,
+    });
+  });
+
+  it("refuses a raised timeout or diff budget", async () => {
+    const rejected = report({ sha: "raise1", fail: true }).decision;
+    const task = buildRepairTask(rejected, "arena");
+    await assert.rejects(
+      () =>
+        new ArenaAdapter().dispatch({
+          ...task,
+          constraints: { ...task.constraints, max_runtime_seconds: 9_999 },
+        }),
+      /timeout/,
+    );
+    await assert.rejects(
+      () =>
+        new ArenaAdapter().dispatch({
+          ...task,
+          constraints: { ...task.constraints, max_diff_lines: 50_000 },
+        }),
+      /diff budget/,
+    );
   });
 });
