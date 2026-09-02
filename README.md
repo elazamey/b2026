@@ -176,7 +176,7 @@ The Guardian does not record `PR #182 = PASS`. It records why.
     "head_sha": "a81f3c2..."
   },
   "contract_hash": "sha256:...",
-  "engine_version": "0.5.0",
+  "engine_version": "0.6.0",
   "timestamp": "2026-09-02T12:00:00.000Z",
   "result": "SAFE_TO_MERGE",
   "checks": {
@@ -310,13 +310,31 @@ A repair that changes `architecture.yaml` is rejected with `CTR-001` even if eve
 
 Gemini, Arena, and a human reviewer cannot flip that conclusion. Setup: [`docs/github-gate.md`](docs/github-gate.md).
 
+## Control Plane (v0.6, read-only)
+
+```bash
+npx tsx src/cli.ts plane --host 0.0.0.0 --port 4173
+```
+
+```text
+Dashboard → READ
+Guardian  → DECIDE
+GitHub    → ENFORCE
+Turso     → STORE
+Arena     → REPAIR
+```
+
+Routes: `/repositories`, `/repository/:id`, `/decisions`, `/decision/:id`, `/findings`, `/audit`.
+
+The site shows `commit_sha`, `contract_hash`, `evidence_hash`, and `result`. It cannot change them. POST returns 405. Setup: [`docs/control-plane.md`](docs/control-plane.md). Enable the merge lock: [`docs/github-gate.md`](docs/github-gate.md).
+
 ## What this release does not do
 
-- No dashboard / Control Plane (v0.6)
 - No Vercel deploy (v0.7)
 - No Gemini merge decision (v0.8, optional explanation only)
 - No Turso as source of truth for the contract
 - No always-on VPS
+- No chat / agent console in the dashboard
 
 Those come later, in this order:
 
@@ -326,8 +344,8 @@ Those come later, in this order:
 | **v0.2** | PR comments + Decision Ledger |
 | **v0.3** | Turso state ledger (optional, recorded state only) |
 | **v0.4** | Agent Adapter + repair loop + audit trail |
-| **v0.5** | Required GitHub gate (`ai-guardian`) ← current |
-| **v0.6** | Web Control Plane (reads Turso, does not decide) |
+| **v0.5** | Required GitHub gate (`ai-guardian`) |
+| **v0.6** | Web Control Plane (reads Turso, does not decide) ← current |
 | **v0.7** | Free Vercel hosting for the Control Plane |
 | **v0.8** | Gemini optional reviewer (never the gate) |
 | **v0.9** | Multi-agent / provider abstraction |
@@ -367,6 +385,7 @@ src/
 npm test
 npm run typecheck
 npx tsx src/cli.ts check
+npx tsx src/cli.ts plane --host 0.0.0.0 --port 4173
 ```
 
 The Guardian verifies this repository against its own `architecture.yaml`.

@@ -1,6 +1,6 @@
 {
   "name": "ai-guardian",
-  "version": "0.5.0",
+  "version": "0.6.0",
   "description": "AI Architecture & Engineering Guardian — deterministic verification and merge decisions for AI-generated changes.",
   "type": "module",
   "bin": {
@@ -26,9 +26,10 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "check": "tsx src/cli.ts check",
-    "test": "tsx --test tests/contract-engine.test.ts tests/scanners.test.ts tests/decision-engine.test.ts tests/cli.test.ts tests/ledger.test.ts tests/github-comment.test.ts tests/store.test.ts tests/loop.test.ts tests/agents.test.ts tests/gate.test.ts",
+    "test": "tsx --test tests/contract-engine.test.ts tests/scanners.test.ts tests/decision-engine.test.ts tests/cli.test.ts tests/ledger.test.ts tests/github-comment.test.ts tests/store.test.ts tests/loop.test.ts tests/agents.test.ts tests/gate.test.ts tests/control-plane.test.ts",
     "typecheck": "tsc --noEmit",
-    "guardian": "tsx src/cli.ts check"
+    "guardian": "tsx src/cli.ts check",
+    "plane": "tsx src/cli.ts plane --host 0.0.0.0 --port 4173"
   },
   "keywords": [
     "architecture",

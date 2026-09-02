@@ -19,6 +19,8 @@ import { applyRepairLoop } from "./loop/apply.js";
 import { buildFindingsPack, writeFindingsPack } from "./loop/findings-pack.js";
 import { dispatchRepairTask } from "./agents/dispatch.js";
 import { detectParentCommitSha } from "./util/git.js";
+import { createControlPlaneReader } from "./control-plane/reader.js";
+import { startControlPlane } from "./control-plane/server.js";
 
 function help(): string {
   return `
@@ -27,6 +29,7 @@ AI Architecture & Engineering Guardian
 Usage:
   ai-guardian check [path]     Verify a repository against architecture.yaml
   ai-guardian findings [path]  Print the latest machine-readable findings pack
+  ai-guardian plane [path]     Serve the read-only Control Plane
   ai-guardian init [path]      Write a starter architecture.yaml contract
   ai-guardian version          Print engine version
 
@@ -40,6 +43,8 @@ Options:
   --no-turso                   Do not persist to Turso even if credentials are set
   --gate                       Publish the required GitHub check named ai-guardian
   --no-gate                    Do not publish a GitHub Check Run
+  --host <addr>                Control plane bind address (default: 0.0.0.0)
+  --port <number>              Control plane port (default: 4173)
   --no-color                   Disable ANSI colors
   --help                       Show this help
 `.trim();
@@ -61,6 +66,8 @@ export async function main(argv: string[]): Promise<number> {
       "no-turso": { type: "boolean", default: false },
       gate: { type: "boolean", default: false },
       "no-gate": { type: "boolean", default: false },
+      host: { type: "string" },
+      port: { type: "string" },
     },
   });
 
@@ -83,6 +90,10 @@ export async function main(argv: string[]): Promise<number> {
 
   if (command === "findings") {
     return runFindings(target, Boolean(values.json));
+  }
+
+  if (command === "plane") {
+    return runPlane(target, values.host, values.port);
   }
 
   if (command !== "check") {
@@ -180,6 +191,22 @@ function parsePr(value?: string): number | undefined {
     throw new Error(`Invalid --pr value: ${value}`);
   }
   return parsed;
+}
+
+async function runPlane(target: string, hostFlag?: string, portFlag?: string): Promise<number> {
+  const host = hostFlag?.trim() || "0.0.0.0";
+  const port = Number.parseInt(portFlag ?? "4173", 10);
+  if (!Number.isInteger(port) || port <= 0 || port > 65535) {
+    process.stderr.write(`Invalid --port value: ${portFlag}\n`);
+    return 2;
+  }
+  const reader = createControlPlaneReader({ root: target, env: process.env });
+  startControlPlane({ host, port, reader });
+  process.stdout.write(
+    `Control plane (read-only) http://${host}:${port}\nSource: ${reader.kind}\nDashboard cannot decide or merge.\n`,
+  );
+  await new Promise(() => undefined);
+  return 0;
 }
 
 function runInit(target: string, contractFlag?: string): number {

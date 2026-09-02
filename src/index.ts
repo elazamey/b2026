@@ -36,3 +36,9 @@ export { createGithubClient, upsertDecisionComment } from "./integrations/github
 export { applyRepairLoop, buildFindingsPack } from "./loop/index.js";
 export { dispatchRepairTask, buildRepairTask, ArenaAdapter, ManualAdapter } from "./agents/index.js";
 export { GATE_CHECK_NAME, gateConclusion } from "./gate/check-run.js";
+export {
+  CONTROL_PLANE_CAPABILITIES,
+  createControlPlaneReader,
+  handleControlPlaneRequest,
+  startControlPlane,
+} from "./control-plane/index.js";

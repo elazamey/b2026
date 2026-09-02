@@ -8,19 +8,29 @@ The coding agent cannot satisfy this check. Gemini cannot satisfy this check. On
 
 On a **public** repository, standard GitHub-hosted runners are free. Keep this repo public for the MVP.
 
-## Enable the merge barrier
+## Enable the merge barrier (human admin)
 
-1. Settings → Branches → Add / Edit branch protection rule for `main`
-2. Enable **Require status checks to pass before merging**
-3. Search for and require:
+The workflow job is not enough. `ai-guardian` must be a **required** status check on `main`.
+
+This cannot be flipped by the coding agent. Creating a ruleset needs repository **admin**. The GitHub token in this environment returns HTTP 403 on `/rulesets` and branch protection.
+
+A human admin:
+
+1. Repository → **Settings** → **Rules** → **Rulesets** → New branch ruleset
+2. Target: `main` (`refs/heads/main`)
+3. Enable **Require a pull request before merging**
+4. Enable **Require status checks to pass**
+5. Search for and require:
 
 ```text
 ai-guardian
 ```
 
-Optionally also require `ci` (unit tests). The merge authority is still `ai-guardian`.
+Optionally also require `ci`. The architectural barrier is still `ai-guardian`.
 
-4. Enable **Require branches to be up to date before merging** if you want repairs re-checked against latest `main`.
+6. Enable **Require branches to be up to date before merging** if repairs must re-check against latest `main`.
+
+Until that ruleset exists, a user with bypass permission can still merge a red PR. After it exists, GitHub enforces Guardian.
 
 ## What the check reports
 
@@ -57,6 +67,6 @@ The composite action fails the job on `REJECTED`. Add `--gate` / `GITHUB_TOKEN` 
 ## What this is not
 
 - Not a Vercel deploy gate (v0.7)
-- Not a dashboard (v0.6)
+- Not a dashboard that can merge (v0.6 is read-only)
 - Not an LLM vote
 - Not an Arena-controlled check

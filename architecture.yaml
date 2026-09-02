@@ -18,7 +18,9 @@ architecture:
     - src/loop
     - src/agents
     - src/gate
+    - src/control-plane
     - docs/github-gate.md
+    - docs/control-plane.md
     - contracts/architecture.schema.yaml
     - contracts/decision-ledger.schema.yaml
     - contracts/turso.schema.sql
@@ -51,6 +53,7 @@ boundaries:
     forbidden_imports:
       - src/cli.ts
       - src/integrations
+      - src/control-plane
   scanners:
     paths:
       - src/scanners
@@ -58,6 +61,12 @@ boundaries:
       - src/cli.ts
       - src/integrations
       - src/ledger
+      - src/control-plane
+  control_plane:
+    paths:
+      - src/control-plane
+    forbidden_imports:
+      - src/core
 
 quality:
   tests_required: true
