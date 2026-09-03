@@ -1,0 +1,3 @@
+# ai-guardian negative test
+# Deliberately fake, non-functional test fixture — not a real secret.
+OPENAI_API_KEY=sk-test-ai-guardian-rejection-000000000000000000000000
